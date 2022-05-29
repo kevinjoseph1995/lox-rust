@@ -2,8 +2,28 @@ use std::{
     env,
     io::{self, Read, Write},
 };
+
 mod error;
+mod interpreter;
+mod scanner;
+mod tokens;
+
 use error::LoxError;
+use interpreter::Interpreter;
+
+fn main() -> Result<(), LoxError> {
+    let args: Vec<_> = env::args().collect();
+
+    let mut interpreter: Interpreter = Interpreter::new();
+
+    match args.len() {
+        1 => run_from_console(&mut interpreter)?,
+        2 => run_from_file(&args[1], &mut interpreter)?,
+        _ => print_usage(),
+    };
+
+    Ok(())
+}
 
 fn print_usage() {
     let help_message = r#"
@@ -13,11 +33,7 @@ fn print_usage() {
     println!("{}", help_message);
 }
 
-fn run(line: &str) {
-    println!("Running line {}", line);
-}
-
-fn run_from_console() -> Result<(), LoxError> {
+fn run_from_console(interpreter: &mut Interpreter) -> Result<(), LoxError> {
     let mut buffer = String::new();
     loop {
         buffer.clear();
@@ -31,27 +47,23 @@ fn run_from_console() -> Result<(), LoxError> {
             print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
             continue;
         }
-        run(&buffer);
+        run(&buffer, interpreter)?;
     }
     Ok(())
 }
 
-fn run_from_file(filename: &str) -> Result<(), LoxError> {
+fn run_from_file(filename: &str, interpreter: &mut Interpreter) -> Result<(), LoxError> {
     let mut input_file = std::fs::File::open(filename)?;
     let mut file_contents = String::new();
     input_file.read_to_string(&mut file_contents)?;
-
-    todo!("Complete me");
+    run(&file_contents, interpreter)?;
+    Ok(())
 }
 
-fn main() -> Result<(), LoxError> {
-    let args: Vec<_> = env::args().collect();
-
-    match args.len() {
-        1 => run_from_console()?,
-        2 => run_from_file(&args[2])?,
-        _ => print_usage(),
-    };
+fn run(line: &str, interpreter: &mut Interpreter) -> Result<(), LoxError> {
+    println!("Running line {}", line);
+    let tokens = interpreter.scanner.scan_tokens(&(line.as_bytes()));
+    println!("{:#?}", tokens);
 
     Ok(())
 }
