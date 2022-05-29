@@ -1,4 +1,5 @@
 use core::num;
+use std::collections::HashMap;
 
 use crate::error::LoxError;
 use crate::tokens::Token;
@@ -9,11 +10,34 @@ pub struct Scanner {
     output_tokens: Vec<Token>,
 }
 
+const KEYWORD_MAP: &'static [(&'static str, TokenType)] = &[
+    ("and", TokenType::And),
+    ("class", TokenType::Class),
+    ("else", TokenType::Else),
+    ("false", TokenType::False),
+    ("fun", TokenType::Fun),
+    ("for", TokenType::For),
+    ("if", TokenType::If),
+    ("nil", TokenType::Nil),
+    ("or", TokenType::Or),
+    ("print", TokenType::Print),
+    ("return", TokenType::Return),
+    ("super", TokenType::Super),
+    ("this", TokenType::This),
+    ("true", TokenType::True),
+    ("var", TokenType::Var),
+    ("while", TokenType::For),
+];
+
 impl Scanner {
     pub fn scan_tokens(&mut self, input: &[u8]) -> Result<&Vec<Token>, LoxError> {
         let mut index = 0;
         let mut line_number = 1;
         self.output_tokens.clear();
+
+        let is_number = |x: u8| return x >= b'0' && x <= b'9';
+        let is_alphabet = |x: u8| return (x >= b'a' && x <= b'z') || (x >= b'A' && x <= b'Z');
+        let is_alphanumeric = |x: u8| return is_number(x) || is_alphabet(x);
 
         while index < input.len() {
             let ch = input[index];
@@ -121,7 +145,7 @@ impl Scanner {
                         // This is the start of a comment, consume all characters till the end
                         index = index + 2;
                         loop {
-                            if index > input.len() {
+                            if index >= input.len() {
                                 break;
                             }
                             if input[index] == b'\n' {
@@ -165,12 +189,11 @@ impl Scanner {
                     });
                     index += 1; // This moves index to the closing quotation mark
                 }
-                c if c >= b'0' && c <= b'9' => {
+                c if is_number(c) => {
                     // Start of number literal
                     let start = index;
                     while index + 1 < input.len()
-                        && ((input[index + 1] >= b'0' && input[index + 1] <= b'9')
-                            || input[index + 1] == b'.')
+                        && (is_number(input[index + 1]) || input[index + 1] == b'.')
                     {
                         index += 1;
                     }
@@ -186,6 +209,38 @@ impl Scanner {
                         token_type: TokenType::NumberLiteral(parsed_number),
                     });
                 }
+                c if is_alphabet(c) => {
+                    // Start of an identifier or keyword
+                    let start = index;
+                    while index + 1 < input.len()
+                        && (is_alphanumeric(input[index + 1]) || input[index + 1] == b'_')
+                    {
+                        index += 1;
+                    }
+                    let is_keyword = |x: &str| -> Result<&TokenType, _> {
+                        for (key, token_type) in KEYWORD_MAP {
+                            if x == *key {
+                                return Ok(token_type);
+                            }
+                        }
+                        Err(())
+                    };
+                    let name = std::str::from_utf8(&input[start..index + 1])?;
+                    match is_keyword(name) {
+                        Ok(keyword_token_type) => {
+                            self.output_tokens.push(Token {
+                                line_number,
+                                token_type: keyword_token_type.clone(),
+                            });
+                        }
+                        _ => {
+                            self.output_tokens.push(Token {
+                                line_number,
+                                token_type: TokenType::Identifier(input[start..index + 1].to_vec()),
+                            });
+                        }
+                    }
+                }
                 _ => {
                     return Err(LoxError::LexErr(format!(
                         "Invalid character on line: {}",
@@ -195,6 +250,10 @@ impl Scanner {
             }
             index = index + 1;
         }
+        self.output_tokens.push(Token {
+            line_number,
+            token_type: TokenType::Eof,
+        });
         Ok(&self.output_tokens)
     }
 }

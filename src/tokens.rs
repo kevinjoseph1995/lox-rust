@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TokenType {
     // Single-character Tokens.
     LeftParen,
@@ -22,7 +22,7 @@ pub enum TokenType {
     Less,
     LessEqual,
     // Literals.
-    Identifier,
+    Identifier(Vec<u8>),
     StringLiteral(Vec<u8>),
     NumberLiteral(f64),
     // Keywords.
