@@ -30,10 +30,14 @@ const KEYWORD_MAP: &'static [(&'static str, TokenType)] = &[
 ];
 
 impl Scanner {
-    pub fn scan_tokens(&mut self, input: &[u8]) -> Result<&Vec<Token>, LoxError> {
+    fn reset_scanner_state(&mut self) {
+        self.output_tokens.clear();
+    }
+
+    pub fn scan_tokens(&mut self, input: &[u8]) -> Result<&[Token], LoxError> {
+        self.reset_scanner_state();
         let mut index = 0;
         let mut line_number = 1;
-        self.output_tokens.clear();
 
         let is_number = |x: u8| return x >= b'0' && x <= b'9';
         let is_alphabet = |x: u8| return (x >= b'a' && x <= b'z') || (x >= b'A' && x <= b'Z');
@@ -254,6 +258,6 @@ impl Scanner {
             line_number,
             token_type: TokenType::Eof,
         });
-        Ok(&self.output_tokens)
+        Ok(&self.output_tokens[..])
     }
 }
