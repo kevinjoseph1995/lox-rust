@@ -1,6 +1,3 @@
-use core::num;
-use std::collections::HashMap;
-
 use crate::error::LoxError;
 use crate::tokens::Token;
 use crate::tokens::TokenType;
@@ -26,7 +23,7 @@ const KEYWORD_MAP: &'static [(&'static str, TokenType)] = &[
     ("this", TokenType::This),
     ("true", TokenType::True),
     ("var", TokenType::Var),
-    ("while", TokenType::For),
+    ("while", TokenType::While),
 ];
 
 impl Scanner {

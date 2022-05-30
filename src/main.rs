@@ -3,6 +3,7 @@ use std::{
     io::{self, Read, Write},
 };
 
+mod ast_printer;
 mod error;
 mod global_handle;
 mod parser;
@@ -65,7 +66,11 @@ fn run_from_file(filename: &str, global_handle: &mut GlobalHandle) -> Result<(),
 fn run(line: &str, global_handle: &mut GlobalHandle) -> Result<(), LoxError> {
     let tokens = global_handle.scanner.scan_tokens(&(line.as_bytes()))?;
     println!("{:#?}", tokens);
-    let parser = Parser::new(&tokens);
+    let mut parser = Parser::new(&tokens);
+
+    let expression = parser.parse()?;
+
+    ast_printer::print_expression(&expression);
 
     Ok(())
 }
