@@ -6,6 +6,7 @@ use std::{
 mod ast_printer;
 mod error;
 mod global_handle;
+mod interpreter;
 mod parser;
 mod scanner;
 mod tokens;

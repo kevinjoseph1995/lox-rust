@@ -5,6 +5,7 @@ pub enum LoxError {
     ParseFloatError(std::num::ParseFloatError),
     LexErr(String),
     ParserError(String),
+    RuntimeError(String),
 }
 
 impl From<std::io::Error> for LoxError {
