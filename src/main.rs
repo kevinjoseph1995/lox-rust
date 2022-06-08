@@ -73,5 +73,7 @@ fn run(line: &str, global_handle: &mut GlobalHandle) -> Result<(), LoxError> {
 
     ast_printer::print_expression(&expression);
 
+    global_handle.interpreter.interpret(&expression)?;
+
     Ok(())
 }

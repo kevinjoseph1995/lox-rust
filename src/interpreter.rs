@@ -5,6 +5,7 @@ pub struct Interpreter {
     // Currently stateless, add state here
 }
 
+#[derive(Debug)]
 enum DynamicType {
     Number(f64),
     String(Vec<u8>),
@@ -51,12 +52,17 @@ impl From<&LiteralType> for DynamicType {
 
 impl Interpreter {
     pub fn interpret(&mut self, expression: &Box<Expression>) -> Result<(), LoxError> {
-        !todo!();
+        let value = self.evaluate(expression)?;
+        println!("{:?}", value);
+        Ok(())
     }
     fn evaluate(&mut self, expression: &Box<Expression>) -> Result<DynamicType, LoxError> {
         match expression.as_ref() {
             Expression::Literal(literal_type) => Ok(DynamicType::from(literal_type)),
-            Expression::Grouping(_) => todo!(),
+            Expression::Grouping(grouped_expression) => {
+                let value = self.evaluate(grouped_expression)?;
+                Ok(value)
+            }
             Expression::Unary(unary_operator, unary_operator_expression) => {
                 let value = self.evaluate(unary_operator_expression)?;
                 match unary_operator {
@@ -73,7 +79,7 @@ impl Interpreter {
                     },
                     UnaryOperator::Not => match value {
                         DynamicType::String(_) => Ok(DynamicType::False),
-                        DynamicType::Number(number) => Ok(DynamicType::False),
+                        DynamicType::Number(_) => Ok(DynamicType::False),
                         DynamicType::True => Ok(DynamicType::False),
                         DynamicType::False => Ok(DynamicType::True),
                         DynamicType::Nil => Ok(DynamicType::True),
@@ -82,19 +88,118 @@ impl Interpreter {
             }
             Expression::Binary(lhs_expression, binary_operator, rhs_expression) => {
                 let left_value = self.evaluate(lhs_expression)?;
-                let right_value = self.evaluate(lhs_expression)?;
+                let right_value = self.evaluate(rhs_expression)?;
                 match binary_operator {
                     BinaryOperator::Equal => Ok(DynamicType::from(left_value == right_value)),
                     BinaryOperator::NotEqual => Ok(DynamicType::from(left_value != right_value)),
-                    BinaryOperator::Plus => todo!(),
+                    BinaryOperator::Plus => match (left_value, right_value) {
+                        (DynamicType::String(str1), DynamicType::String(str2)) => {
+                            let mut v3 = Vec::new();
+                            v3.extend_from_slice(&str1[..]);
+                            v3.extend_from_slice(&str2[..]);
+                            Ok(DynamicType::String(v3))
+                        }
+                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                            Ok(DynamicType::Number(num1 + num2))
+                        }
+                        _ => {
+                            return Err(LoxError::RuntimeError(
+                                "Invalid operands for +
+                                operator"
+                                    .to_string(),
+                            ))
+                        }
+                    },
                     // Only for number, true and false type
-                    BinaryOperator::LessThan => todo!(),
-                    BinaryOperator::LessThanEqual => todo!(),
-                    BinaryOperator::GreaterThan => todo!(),
-                    BinaryOperator::GreaterThanEqual => todo!(),
-                    BinaryOperator::Minus => todo!(),
-                    BinaryOperator::Multiply => todo!(),
-                    BinaryOperator::Divide => todo!(),
+                    BinaryOperator::LessThan => match (left_value, right_value) {
+                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                            if num1 < num2 {
+                                Ok(DynamicType::True)
+                            } else {
+                                Ok(DynamicType::False)
+                            }
+                        }
+                        _ => {
+                            return Err(LoxError::RuntimeError(
+                                "Invalid operands given to < operator".to_string(),
+                            ))
+                        }
+                    },
+                    BinaryOperator::LessThanEqual => match (left_value, right_value) {
+                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                            if num1 <= num2 {
+                                Ok(DynamicType::True)
+                            } else {
+                                Ok(DynamicType::False)
+                            }
+                        }
+                        _ => {
+                            return Err(LoxError::RuntimeError(
+                                "Invalid operands given to <= operator".to_string(),
+                            ))
+                        }
+                    },
+
+                    BinaryOperator::GreaterThan => match (left_value, right_value) {
+                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                            if num1 > num2 {
+                                Ok(DynamicType::True)
+                            } else {
+                                Ok(DynamicType::False)
+                            }
+                        }
+                        _ => {
+                            return Err(LoxError::RuntimeError(
+                                "Invalid operands given to > operator".to_string(),
+                            ))
+                        }
+                    },
+
+                    BinaryOperator::GreaterThanEqual => match (left_value, right_value) {
+                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                            if num1 >= num2 {
+                                Ok(DynamicType::True)
+                            } else {
+                                Ok(DynamicType::False)
+                            }
+                        }
+                        _ => {
+                            return Err(LoxError::RuntimeError(
+                                "Invalid operands given to >= operator".to_string(),
+                            ))
+                        }
+                    },
+
+                    BinaryOperator::Minus => match (left_value, right_value) {
+                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                            Ok(DynamicType::Number(num1 - num2))
+                        }
+                        _ => {
+                            return Err(LoxError::RuntimeError(
+                                "Invalid operands given to - operator".to_string(),
+                            ))
+                        }
+                    },
+                    BinaryOperator::Multiply => match (left_value, right_value) {
+                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                            Ok(DynamicType::Number(num1 * num2))
+                        }
+                        _ => {
+                            return Err(LoxError::RuntimeError(
+                                "Invalid operands given to *  operator".to_string(),
+                            ))
+                        }
+                    },
+                    BinaryOperator::Divide => match (left_value, right_value) {
+                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                            Ok(DynamicType::Number(num1 / num2))
+                        }
+                        _ => {
+                            return Err(LoxError::RuntimeError(
+                                "Invalid operands given to / operator".to_string(),
+                            ))
+                        }
+                    },
                 }
             }
         }
