@@ -1,7 +1,17 @@
-use crate::parser::Expression;
+use crate::parser::{Expression, Program, Statement};
 
-pub fn print_expression(expression: &Expression) {
-    println!("{}", stringify(expression));
+#[allow(dead_code)]
+pub fn visualize_program_ast(program: &Program) {
+    for statement in &program.statements {
+        match statement {
+            Statement::Expression(expression) => {
+                stringify(&expression);
+            }
+            Statement::Print(expression) => {
+                stringify(&expression);
+            }
+        }
+    }
 }
 
 fn stringify(expression: &Expression) -> String {

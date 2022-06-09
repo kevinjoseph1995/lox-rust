@@ -15,6 +15,8 @@ use error::LoxError;
 use global_handle::GlobalHandle;
 use parser::Parser;
 
+use crate::parser::Program;
+
 fn main() -> Result<(), LoxError> {
     let args: Vec<_> = env::args().collect();
 
@@ -51,7 +53,7 @@ fn run_from_console(global_handle: &mut GlobalHandle) -> Result<(), LoxError> {
             print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
             continue;
         }
-        run(&buffer, global_handle)?;
+        run(&buffer, global_handle);
     }
     Ok(())
 }
@@ -60,20 +62,30 @@ fn run_from_file(filename: &str, global_handle: &mut GlobalHandle) -> Result<(),
     let mut input_file = std::fs::File::open(filename)?;
     let mut file_contents = String::new();
     input_file.read_to_string(&mut file_contents)?;
-    run(&file_contents, global_handle)?;
+    run(&file_contents, global_handle);
     Ok(())
 }
 
-fn run(line: &str, global_handle: &mut GlobalHandle) -> Result<(), LoxError> {
-    let tokens = global_handle.scanner.scan_tokens(&(line.as_bytes()))?;
-    println!("{:#?}", tokens);
-    let mut parser = Parser::new(&tokens);
+fn run(line: &str, global_handle: &mut GlobalHandle) {
+    match run_wrapper(&line, global_handle) {
+        Err(err) => {
+            println!("{}", err);
+        }
+        Ok(_) => {}
+    }
+}
 
-    let expression = parser.parse()?;
+fn run_wrapper(line: &str, global_handle: &mut GlobalHandle) -> Result<(), LoxError> {
+    // Scan
+    let mut tokens = global_handle.scanner.scan_tokens(&(line.as_bytes()))?;
+    // println!("{:#?}", tokens); //  Uncomment me to list out the scanned tokens
+    // Parse
+    let mut parser = Parser::new(&mut tokens);
+    let program = parser.parse()?;
 
-    ast_printer::print_expression(&expression);
+    // ast_printer::visualize_program_ast(&program); //  Uncomment me to visualize the AST
 
-    global_handle.interpreter.interpret(&expression)?;
+    global_handle.interpreter.interpret(&program)?;
 
     Ok(())
 }

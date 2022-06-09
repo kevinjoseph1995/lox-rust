@@ -175,7 +175,6 @@ impl Scanner {
                     let start = index + 1;
                     let start_line_number = line_number;
                     while index + 1 < input.len() && input[index + 1] != b'"' {
-                        println!("{}", input[index + 1] as char);
                         if input[index + 1] == b'\n' {
                             line_number += 1;
                         }
@@ -218,20 +217,20 @@ impl Scanner {
                     {
                         index += 1;
                     }
-                    let is_keyword = |x: &str| -> Result<&TokenType, _> {
+                    let is_keyword = |x: &str| -> Option<TokenType> {
                         for (key, token_type) in KEYWORD_MAP {
                             if x == *key {
-                                return Ok(token_type);
+                                return Some(token_type.clone());
                             }
                         }
-                        Err(())
+                        None
                     };
                     let name = std::str::from_utf8(&input[start..index + 1])?;
                     match is_keyword(name) {
-                        Ok(keyword_token_type) => {
+                        Some(keyword_token_type) => {
                             self.output_tokens.push(Token {
                                 line_number,
-                                token_type: keyword_token_type.clone(),
+                                token_type: keyword_token_type,
                             });
                         }
                         _ => {

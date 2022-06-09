@@ -1,11 +1,10 @@
 use crate::error::LoxError;
-use crate::parser::{BinaryOperator, Expression, LiteralType, UnaryOperator};
+use crate::parser::{BinaryOperator, Expression, LiteralType, Program, Statement, UnaryOperator};
 
 pub struct Interpreter {
     // Currently stateless, add state here
 }
 
-#[derive(Debug)]
 enum DynamicType {
     Number(f64),
     String(Vec<u8>),
@@ -50,12 +49,47 @@ impl From<&LiteralType> for DynamicType {
     }
 }
 
+impl std::fmt::Display for DynamicType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DynamicType::Number(number) => {
+                write!(f, "{}", number)
+            }
+            DynamicType::String(u8_vec) => {
+                let result = std::str::from_utf8(u8_vec);
+
+                match result {
+                    Ok(str_val) => write!(f, "{}", str_val),
+                    Err(_) => write!(f, "UTF decoding error"),
+                }
+            }
+            DynamicType::True => {
+                write!(f, "True")
+            }
+            DynamicType::False => {
+                write!(f, "False")
+            }
+            DynamicType::Nil => {
+                write!(f, "Nil")
+            }
+        }
+    }
+}
+
 impl Interpreter {
-    pub fn interpret(&mut self, expression: &Box<Expression>) -> Result<(), LoxError> {
-        let value = self.evaluate(expression)?;
-        println!("{:?}", value);
+    pub fn interpret(&mut self, program: &Program) -> Result<(), LoxError> {
+        for statement in &program.statements {
+            match statement {
+                Statement::Expression(expression) => !todo!(),
+                Statement::Print(expression) => {
+                    let result = self.evaluate(&expression)?;
+                    println!("{}", result)
+                }
+            }
+        }
         Ok(())
     }
+
     fn evaluate(&mut self, expression: &Box<Expression>) -> Result<DynamicType, LoxError> {
         match expression.as_ref() {
             Expression::Literal(literal_type) => Ok(DynamicType::from(literal_type)),

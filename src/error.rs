@@ -1,11 +1,30 @@
+use std::fmt::Display;
+
 #[derive(Debug)]
 pub enum LoxError {
     IOError(std::io::Error),
-    UTF8Error(std::str::Utf8Error),
-    ParseFloatError(std::num::ParseFloatError),
     LexErr(String),
     ParserError(String),
     RuntimeError(String),
+}
+
+impl Display for LoxError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoxError::IOError(err) => {
+                write!(f, "{}", err.to_string())
+            }
+            LoxError::LexErr(err) => {
+                write!(f, "{}", err)
+            }
+            LoxError::ParserError(err) => {
+                write!(f, "{}", err)
+            }
+            LoxError::RuntimeError(err) => {
+                write!(f, "{}", err)
+            }
+        }
+    }
 }
 
 impl From<std::io::Error> for LoxError {
@@ -16,12 +35,12 @@ impl From<std::io::Error> for LoxError {
 
 impl From<std::str::Utf8Error> for LoxError {
     fn from(x: std::str::Utf8Error) -> Self {
-        LoxError::UTF8Error(x)
+        LoxError::ParserError(x.to_string())
     }
 }
 
 impl From<std::num::ParseFloatError> for LoxError {
     fn from(x: std::num::ParseFloatError) -> Self {
-        LoxError::ParseFloatError(x)
+        LoxError::ParserError(x.to_string())
     }
 }

@@ -5,6 +5,23 @@ use crate::{
 use std::fmt::Debug;
 use std::str;
 
+pub struct Program {
+    pub statements: Vec<Statement>,
+}
+
+impl Program {
+    pub fn new() -> Program {
+        Program {
+            statements: Vec::<Statement>::new(),
+        }
+    }
+}
+
+pub enum Statement {
+    Expression(Box<Expression>),
+    Print(Box<Expression>),
+}
+
 #[derive(Debug)]
 pub enum Expression {
     Literal(LiteralType),
@@ -77,19 +94,6 @@ impl Debug for LiteralType {
     }
 }
 
-/*
-Expression grammar for Lox from https://craftinginterpreters.com/parsing-expressions.html
-expression     → equality ;
-equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-term           → factor ( ( "-" | "+" ) factor )* ;
-factor         → unary ( ( "/" | "*" ) unary )* ;
-unary          → ( "!" | "-" ) unary
-               | primary ;
-primary        → NUMBER | STRING | "true" | "false" | "nil"
-               | "(" expression ")" ;
-*/
-
 pub struct Parser<'a> {
     tokens: &'a [Token], // The tokens are owned by the scanner
     index: usize,
@@ -100,9 +104,75 @@ impl<'a> Parser<'a> {
         Parser { tokens, index: 0 }
     }
 
-    pub fn parse(&mut self) -> Result<Box<Expression>, LoxError> {
-        self.expression()
+    pub fn parse(&mut self) -> Result<Program, LoxError> {
+        self.program()
     }
+    /*
+        Taken from https://craftinginterpreters.com/statements-and-state.html
+        program        → statement* EOF ;
+        statement      → exprStmt  | printStmt ;
+        exprStmt       → expression ";" ;
+        printStmt      → "print" expression ";" ;
+
+    */
+
+    fn program(&mut self) -> Result<Program, LoxError> {
+        let mut program = Program::new();
+        loop {
+            if self.index == self.tokens.len()
+                || self.tokens[self.index].token_type == TokenType::Eof
+            {
+                break;
+            } else {
+                let statement = self.statement()?;
+                program.statements.push(statement)
+            }
+        }
+        Ok(program)
+    }
+
+    fn statement(&mut self) -> Result<Statement, LoxError> {
+        match self.tokens[self.index].token_type {
+            TokenType::Print => {
+                self.index += 1;
+                let expr = self.get_expression_for_statement()?;
+                return Ok(Statement::Print(expr));
+            }
+            _ => {
+                let expr = self.get_expression_for_statement()?;
+                return Ok(Statement::Expression(expr));
+            }
+        };
+    }
+
+    fn get_expression_for_statement(&mut self) -> Result<Box<Expression>, LoxError> {
+        let expression = self.expression()?;
+        match self.tokens[self.index].token_type {
+            TokenType::Semicolon => {
+                self.index += 1; // Move the index past the semicolon token
+                Ok(expression)
+            }
+            _ => {
+                return Err(LoxError::ParserError(format!(
+                    "Statement must terminate with a semicolon. Line number:{}",
+                    &self.tokens[self.index].line_number
+                )))
+            }
+        }
+    }
+
+    /*
+        Expression grammar for Lox from https://craftinginterpreters.com/parsing-expressions.html
+        expression     → equality ;
+        equality       → comparison ( ( "!=" | "==" ) comparison )* ;
+        comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+        term           → factor ( ( "-" | "+" ) factor )* ;
+        factor         → unary ( ( "/" | "*" ) unary )* ;
+        unary          → ( "!" | "-" ) unary
+                    | primary ;
+        primary        → NUMBER | STRING | "true" | "false" | "nil"
+                    | "(" expression ")" ;
+    */
 
     fn expression(&mut self) -> Result<Box<Expression>, LoxError> {
         return self.equality();
@@ -114,7 +184,7 @@ impl<'a> Parser<'a> {
     fn equality(&mut self) -> Result<Box<Expression>, LoxError> {
         let expr = self.comparison()?;
         loop {
-            match &self.tokens[self.index].token_type {
+            match self.tokens[self.index].token_type {
                 TokenType::BangEqual => {
                     self.index += 1;
                     let right_expr = self.comparison()?;
@@ -147,7 +217,7 @@ impl<'a> Parser<'a> {
     fn comparison(&mut self) -> Result<Box<Expression>, LoxError> {
         let expr = self.term()?;
         loop {
-            match &self.tokens[self.index].token_type {
+            match self.tokens[self.index].token_type {
                 TokenType::Greater => {
                     self.index += 1;
                     let right_expr = self.term()?;
@@ -198,7 +268,7 @@ impl<'a> Parser<'a> {
     fn term(&mut self) -> Result<Box<Expression>, LoxError> {
         let expr = self.factor()?;
         loop {
-            match &self.tokens[self.index].token_type {
+            match self.tokens[self.index].token_type {
                 TokenType::Minus => {
                     self.index += 1;
                     let right_expr = self.factor()?;
@@ -231,7 +301,7 @@ impl<'a> Parser<'a> {
     fn factor(&mut self) -> Result<Box<Expression>, LoxError> {
         let expr = self.unary()?;
         loop {
-            match &self.tokens[self.index].token_type {
+            match self.tokens[self.index].token_type {
                 TokenType::Slash => {
                     self.index += 1;
                     let right_expr = self.unary()?;
@@ -262,7 +332,7 @@ impl<'a> Parser<'a> {
      * unary → ( "!" | "-" ) unary     | primary ;
      */
     fn unary(&mut self) -> Result<Box<Expression>, LoxError> {
-        match &self.tokens[self.index].token_type {
+        match self.tokens[self.index].token_type {
             TokenType::Bang => {
                 self.index += 1;
                 let right_expr = self.unary()?;
@@ -300,7 +370,7 @@ impl<'a> Parser<'a> {
             TokenType::StringLiteral(value) => {
                 self.index += 1;
                 Ok(Box::new(Expression::Literal(LiteralType::String(
-                    value.clone(),
+                    value.clone(), // Would have been nice to reuse the allocation made for the string by the scanner
                 ))))
             }
             TokenType::NumberLiteral(value) => {
