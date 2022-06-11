@@ -20,6 +20,7 @@ impl Program {
 pub enum Statement {
     Expression(Box<Expression>),
     Print(Box<Expression>),
+    VariableDeclaration(Vec<u8>, Box<Expression>), // Identifier name and corresponding expression
 }
 
 #[derive(Debug)]
@@ -28,6 +29,7 @@ pub enum Expression {
     Unary(UnaryOperator, Box<Expression>),
     Binary(Box<Expression>, BinaryOperator, Box<Expression>),
     Grouping(Box<Expression>),
+    Identifier(Vec<u8>),
 }
 
 pub enum UnaryOperator {
@@ -107,15 +109,12 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> Result<Program, LoxError> {
         self.program()
     }
+
     /*
-        Taken from https://craftinginterpreters.com/statements-and-state.html
-        program        → statement* EOF ;
-        statement      → exprStmt  | printStmt ;
-        exprStmt       → expression ";" ;
-        printStmt      → "print" expression ";" ;
-
+        program        → declaration* EOF ;
+        declaration    → varDecl |  statement ;
+        statement      → exprStmt | printStmt ;
     */
-
     fn program(&mut self) -> Result<Program, LoxError> {
         let mut program = Program::new();
         loop {
@@ -124,13 +123,55 @@ impl<'a> Parser<'a> {
             {
                 break;
             } else {
-                let statement = self.statement()?;
+                let statement = self.declaration()?;
                 program.statements.push(statement)
             }
         }
         Ok(program)
     }
 
+    // declaration  → varDecl   | statement ;
+    fn declaration(&mut self) -> Result<Statement, LoxError> {
+        match self.tokens[self.index].token_type {
+            TokenType::Var => {
+                self.index += 1;
+                self.variable_declaration()
+            }
+            _ => self.statement(),
+        }
+    }
+
+    // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
+    fn variable_declaration(&mut self) -> Result<Statement, LoxError> {
+        // We expect an identifier after the "var keyword"
+        match &self.tokens[self.index].token_type {
+            TokenType::Identifier(name) => {
+                self.index += 1; // Move past the identifier name
+                match self.tokens[self.index].token_type {
+                    TokenType::Equal => {
+                        self.index += 1; // Move past the "="
+                        let expr = self.expression()?; // Parse the expression
+                        if let TokenType::Semicolon = self.tokens[self.index].token_type {
+                            self.index += 1; // Move past the semi-colon
+                            return Ok(Statement::VariableDeclaration(name.clone(), expr));
+                        }
+                        Err(LoxError::ParserError(
+                            "Expected semi-colon at the end of variable declaration".to_string(),
+                        ))
+                    }
+                    _ => Err(LoxError::ParserError(
+                        "Expected  \"=\" after keyword IDENTIFIER  in variable declaration"
+                            .to_string(),
+                    )),
+                }
+            }
+            _ => Err(LoxError::ParserError(
+                "Expected identifier after keyword \"var\" in variable declaration".to_string(),
+            )),
+        }
+    }
+
+    // statement → exprStmt | printStmt ;
     fn statement(&mut self) -> Result<Statement, LoxError> {
         match self.tokens[self.index].token_type {
             TokenType::Print => {
@@ -351,7 +392,7 @@ impl<'a> Parser<'a> {
     }
 
     /*
-     * primary → NUMBER | STRING | "true" | "false" | "nil"  | "(" expression ")"
+     * primary → NUMBER | STRING | "true" | "false" | "nil"  | "(" expression ") | IDENTIFIER"
      */
     fn primary(&mut self) -> Result<Box<Expression>, LoxError> {
         match &self.tokens[self.index].token_type {
@@ -392,6 +433,10 @@ impl<'a> Parser<'a> {
                         "Expected ')' after expression".to_string(),
                     )),
                 }
+            }
+            TokenType::Identifier(identifier_name) => {
+                self.index += 1;
+                Ok(Box::new(Expression::Identifier(identifier_name.clone())))
             }
             _ => Err(LoxError::ParserError(format!(
                 "Parser error, current index:{}, line number:{}",

@@ -10,7 +10,7 @@ impl GlobalHandle {
     pub fn new() -> GlobalHandle {
         GlobalHandle {
             scanner: Default::default(),
-            interpreter: Interpreter {},
+            interpreter: Interpreter::new(),
         }
     }
 }

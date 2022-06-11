@@ -1,10 +1,7 @@
 use crate::error::LoxError;
 use crate::parser::{BinaryOperator, Expression, LiteralType, Program, Statement, UnaryOperator};
 
-pub struct Interpreter {
-    // Currently stateless, add state here
-}
-
+#[derive(Clone)]
 enum DynamicType {
     Number(f64),
     String(Vec<u8>),
@@ -76,14 +73,82 @@ impl std::fmt::Display for DynamicType {
     }
 }
 
+struct Environment {
+    global_variables: Vec<(Vec<u8>, DynamicType)>,
+}
+
+impl Environment {
+    fn new() -> Self {
+        Environment {
+            global_variables: Vec::new(),
+        }
+    }
+
+    fn name_comp(first: &Vec<u8>, second: &Vec<u8>) -> bool {
+        if first.len() != second.len() {
+            return false;
+        }
+
+        for (ch1, ch2) in first.iter().zip(second.iter()) {
+            if ch1 != ch2 {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    fn lookup_global(&self, name: &Vec<u8>) -> Option<&DynamicType> {
+        if let Some(name_value_pair) = self
+            .global_variables
+            .iter()
+            .find(|x| Self::name_comp(&(*x).0, name))
+        {
+            return Some(&name_value_pair.1);
+        }
+        return None;
+    }
+
+    fn update_global(&mut self, name: Vec<u8>, value: DynamicType) {
+        if let Some(name_value_pair) = self
+            .global_variables
+            .iter_mut()
+            .find(|x| Self::name_comp(&(*x).0, &name))
+        {
+            name_value_pair.1 = value
+        } else {
+            self.global_variables.push((name, value));
+        }
+    }
+
+    fn clear(&mut self) {
+        self.global_variables.clear();
+    }
+}
+
+pub struct Interpreter {
+    environment: Environment,
+}
+
 impl Interpreter {
-    pub fn interpret(&mut self, program: &Program) -> Result<(), LoxError> {
-        for statement in &program.statements {
+    pub fn new() -> Self {
+        Interpreter {
+            environment: Environment::new(),
+        }
+    }
+
+    pub fn interpret(&mut self, program: Program) -> Result<(), LoxError> {
+        for statement in program.statements {
             match statement {
-                Statement::Expression(expression) => !todo!(),
+                Statement::Expression(expression) => {
+                    self.evaluate(&expression)?;
+                }
                 Statement::Print(expression) => {
                     let result = self.evaluate(&expression)?;
                     println!("{}", result)
+                }
+                Statement::VariableDeclaration(name, expression) => {
+                    let value = self.evaluate(&expression)?;
+                    self.environment.update_global(name, value);
                 }
             }
         }
@@ -234,6 +299,17 @@ impl Interpreter {
                             ))
                         }
                     },
+                }
+            }
+            Expression::Identifier(name) => {
+                if let Some(value) = self.environment.lookup_global(&name) {
+                    Ok(value.clone()) // Find a better way to refer to the value stored in the environment
+                } else {
+                    let name_str = std::str::from_utf8(&name).unwrap();
+                    return Err(LoxError::RuntimeError(format!(
+                        "Could not find {} in global namespace",
+                        name_str
+                    )));
                 }
             }
         }
