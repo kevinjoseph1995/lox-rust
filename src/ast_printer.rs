@@ -45,5 +45,9 @@ fn stringify(expression: &Expression) -> String {
             let name_str = std::str::from_utf8(name).unwrap();
             format!("(Identifier {})", name_str)
         }
+        Expression::Assignment(name, expression) => {
+            let name_str = std::str::from_utf8(name).unwrap();
+            format!("(Assignment {} = {:?})", name_str, stringify(&expression))
+        }
     }
 }

@@ -23,13 +23,13 @@ pub enum Statement {
     VariableDeclaration(Vec<u8>, Box<Expression>), // Identifier name and corresponding expression
 }
 
-#[derive(Debug)]
 pub enum Expression {
     Literal(LiteralType),
     Unary(UnaryOperator, Box<Expression>),
     Binary(Box<Expression>, BinaryOperator, Box<Expression>),
     Grouping(Box<Expression>),
     Identifier(Vec<u8>),
+    Assignment(Vec<u8>, Box<Expression>),
 }
 
 pub enum UnaryOperator {
@@ -273,10 +273,11 @@ impl Parser {
             }
         }
     }
-
     /*
         Expression grammar for Lox from https://craftinginterpreters.com/parsing-expressions.html
-        expression     → equality ;
+        expression     → assignment ;
+        assignment     → IDENTIFIER "=" assignment
+                        | equality ;
         equality       → comparison ( ( "!=" | "==" ) comparison )* ;
         comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
         term           → factor ( ( "-" | "+" ) factor )* ;
@@ -288,7 +289,30 @@ impl Parser {
     */
 
     fn expression(&mut self) -> Result<Box<Expression>, LoxError> {
-        return self.equality();
+        return self.assignment();
+    }
+
+    // assignment     → IDENTIFIER "=" assignment | equality ;
+    fn assignment(&mut self) -> Result<Box<Expression>, LoxError> {
+        let mut lhs = self.equality()?;
+
+        if self.tokens[self.index].token_type == TokenType::Equal {
+            self.index += 1; // Move past the "="
+            let value = self.assignment()?;
+            // Validate that the LHS is an expression that we can assign to. For now only variable identifiers are assignable
+            if let Expression::Identifier(name) = lhs.as_mut() {
+                return Ok(Box::new(Expression::Assignment(
+                    std::mem::take(name),
+                    value,
+                )));
+            }
+            // The LHS wasn't an L-value, returning error here, maybe don't?
+            return Err(LoxError::ParserError(
+                "Expected L-value for assignemnt".to_string(),
+            ));
+        }
+
+        return Ok(lhs);
     }
 
     /*

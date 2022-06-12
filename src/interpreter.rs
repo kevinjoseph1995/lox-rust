@@ -36,7 +36,7 @@ impl Environment {
         return None;
     }
 
-    fn update_global(&mut self, name: Vec<u8>, value: LiteralType) {
+    fn update_global(&mut self, name: &Vec<u8>, value: LiteralType) {
         if let Some(name_value_pair) = self
             .global_variables
             .iter_mut()
@@ -44,12 +44,8 @@ impl Environment {
         {
             name_value_pair.1 = value
         } else {
-            self.global_variables.push((name, value));
+            self.global_variables.push((name.clone(), value));
         }
-    }
-
-    fn clear(&mut self) {
-        self.global_variables.clear();
     }
 }
 
@@ -77,7 +73,7 @@ impl Interpreter {
                 }
                 Statement::VariableDeclaration(name, expression) => {
                     let value = self.evaluate(expression)?;
-                    self.environment.update_global(std::mem::take(name), value);
+                    self.environment.update_global(&name, value);
                 }
             }
         }
@@ -238,6 +234,17 @@ impl Interpreter {
                     return Err(LoxError::RuntimeError(format!(
                         "Could not find {} in global namespace",
                         name_str
+                    )));
+                }
+            }
+            Expression::Assignment(name, expr) => {
+                if let Some(_) = self.environment.lookup_global(&name) {
+                    let new_value = self.evaluate(expr)?;
+                    self.environment.update_global(name, new_value);
+                    return Ok(LiteralType::Nil);
+                } else {
+                    return Err(LoxError::RuntimeError(format!(
+                        "Reference to undeclared variable"
                     )));
                 }
             }
