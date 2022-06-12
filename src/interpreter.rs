@@ -1,80 +1,8 @@
 use crate::error::LoxError;
 use crate::parser::{BinaryOperator, Expression, LiteralType, Program, Statement, UnaryOperator};
 
-#[derive(Clone)]
-enum DynamicType {
-    Number(f64),
-    String(Vec<u8>),
-    True,
-    False,
-    Nil,
-}
-
-impl Eq for DynamicType {}
-
-impl PartialEq for DynamicType {
-    fn eq(&self, other: &Self) -> bool {
-        if let (DynamicType::Number(value1), DynamicType::Number(value2)) = (&self, &other) {
-            return value1 == value2;
-        }
-        if let (DynamicType::String(value1), DynamicType::String(value2)) = (&self, &other) {
-            return value1 == value2;
-        }
-        return self == other;
-    }
-}
-
-impl From<bool> for DynamicType {
-    fn from(v: bool) -> DynamicType {
-        if v {
-            DynamicType::True
-        } else {
-            DynamicType::False
-        }
-    }
-}
-
-impl From<&LiteralType> for DynamicType {
-    fn from(x: &LiteralType) -> Self {
-        match x {
-            LiteralType::Number(number) => Self::Number(number.clone()),
-            LiteralType::String(string) => Self::String(string.clone()),
-            LiteralType::True => Self::True,
-            LiteralType::False => Self::False,
-            LiteralType::Nil => Self::Nil,
-        }
-    }
-}
-
-impl std::fmt::Display for DynamicType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DynamicType::Number(number) => {
-                write!(f, "{}", number)
-            }
-            DynamicType::String(u8_vec) => {
-                let result = std::str::from_utf8(u8_vec);
-
-                match result {
-                    Ok(str_val) => write!(f, "{}", str_val),
-                    Err(_) => write!(f, "UTF decoding error"),
-                }
-            }
-            DynamicType::True => {
-                write!(f, "True")
-            }
-            DynamicType::False => {
-                write!(f, "False")
-            }
-            DynamicType::Nil => {
-                write!(f, "Nil")
-            }
-        }
-    }
-}
-
 struct Environment {
-    global_variables: Vec<(Vec<u8>, DynamicType)>,
+    global_variables: Vec<(Vec<u8>, LiteralType)>,
 }
 
 impl Environment {
@@ -97,7 +25,7 @@ impl Environment {
         return true;
     }
 
-    fn lookup_global(&self, name: &Vec<u8>) -> Option<&DynamicType> {
+    fn lookup_global(&self, name: &Vec<u8>) -> Option<&LiteralType> {
         if let Some(name_value_pair) = self
             .global_variables
             .iter()
@@ -108,7 +36,7 @@ impl Environment {
         return None;
     }
 
-    fn update_global(&mut self, name: Vec<u8>, value: DynamicType) {
+    fn update_global(&mut self, name: Vec<u8>, value: LiteralType) {
         if let Some(name_value_pair) = self
             .global_variables
             .iter_mut()
@@ -137,27 +65,28 @@ impl Interpreter {
     }
 
     pub fn interpret(&mut self, program: Program) -> Result<(), LoxError> {
-        for statement in program.statements {
+        let mut statements = program.statements;
+        for statement in &mut statements {
             match statement {
                 Statement::Expression(expression) => {
-                    self.evaluate(&expression)?;
+                    self.evaluate(expression)?;
                 }
                 Statement::Print(expression) => {
-                    let result = self.evaluate(&expression)?;
+                    let result = self.evaluate(expression)?;
                     println!("{}", result)
                 }
                 Statement::VariableDeclaration(name, expression) => {
-                    let value = self.evaluate(&expression)?;
-                    self.environment.update_global(name, value);
+                    let value = self.evaluate(expression)?;
+                    self.environment.update_global(std::mem::take(name), value);
                 }
             }
         }
         Ok(())
     }
 
-    fn evaluate(&mut self, expression: &Box<Expression>) -> Result<DynamicType, LoxError> {
-        match expression.as_ref() {
-            Expression::Literal(literal_type) => Ok(DynamicType::from(literal_type)),
+    fn evaluate(&mut self, expression: &mut Box<Expression>) -> Result<LiteralType, LoxError> {
+        match expression.as_mut() {
+            Expression::Literal(literal_type) => Ok(literal_type.take()),
             Expression::Grouping(grouped_expression) => {
                 let value = self.evaluate(grouped_expression)?;
                 Ok(value)
@@ -166,22 +95,22 @@ impl Interpreter {
                 let value = self.evaluate(unary_operator_expression)?;
                 match unary_operator {
                     UnaryOperator::Negate => match value {
-                        DynamicType::String(_) => {
+                        LiteralType::String(_) => {
                             return Err(LoxError::RuntimeError(
                                 "Invalid runtime type for negation operation".to_string(),
                             ));
                         }
-                        DynamicType::Number(number) => Ok(DynamicType::Number(-number)),
-                        DynamicType::True => Ok(DynamicType::Number(-1.0f64)), // Implicit cast to number
-                        DynamicType::False => Ok(DynamicType::Number(0.0f64)), // Implicit cast to number
-                        DynamicType::Nil => Ok(DynamicType::Nil),
+                        LiteralType::Number(number) => Ok(LiteralType::Number(-number)),
+                        LiteralType::True => Ok(LiteralType::Number(-1.0f64)), // Implicit cast to number
+                        LiteralType::False => Ok(LiteralType::Number(0.0f64)), // Implicit cast to number
+                        LiteralType::Nil => Ok(LiteralType::Nil),
                     },
                     UnaryOperator::Not => match value {
-                        DynamicType::String(_) => Ok(DynamicType::False),
-                        DynamicType::Number(_) => Ok(DynamicType::False),
-                        DynamicType::True => Ok(DynamicType::False),
-                        DynamicType::False => Ok(DynamicType::True),
-                        DynamicType::Nil => Ok(DynamicType::True),
+                        LiteralType::String(_) => Ok(LiteralType::False),
+                        LiteralType::Number(_) => Ok(LiteralType::False),
+                        LiteralType::True => Ok(LiteralType::False),
+                        LiteralType::False => Ok(LiteralType::True),
+                        LiteralType::Nil => Ok(LiteralType::True),
                     },
                 }
             }
@@ -189,17 +118,17 @@ impl Interpreter {
                 let left_value = self.evaluate(lhs_expression)?;
                 let right_value = self.evaluate(rhs_expression)?;
                 match binary_operator {
-                    BinaryOperator::Equal => Ok(DynamicType::from(left_value == right_value)),
-                    BinaryOperator::NotEqual => Ok(DynamicType::from(left_value != right_value)),
+                    BinaryOperator::Equal => Ok(LiteralType::from(left_value == right_value)),
+                    BinaryOperator::NotEqual => Ok(LiteralType::from(left_value != right_value)),
                     BinaryOperator::Plus => match (left_value, right_value) {
-                        (DynamicType::String(str1), DynamicType::String(str2)) => {
+                        (LiteralType::String(str1), LiteralType::String(str2)) => {
                             let mut v3 = Vec::new();
                             v3.extend_from_slice(&str1[..]);
                             v3.extend_from_slice(&str2[..]);
-                            Ok(DynamicType::String(v3))
+                            Ok(LiteralType::String(v3))
                         }
-                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
-                            Ok(DynamicType::Number(num1 + num2))
+                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
+                            Ok(LiteralType::Number(num1 + num2))
                         }
                         _ => {
                             return Err(LoxError::RuntimeError(
@@ -211,11 +140,11 @@ impl Interpreter {
                     },
                     // Only for number, true and false type
                     BinaryOperator::LessThan => match (left_value, right_value) {
-                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
                             if num1 < num2 {
-                                Ok(DynamicType::True)
+                                Ok(LiteralType::True)
                             } else {
-                                Ok(DynamicType::False)
+                                Ok(LiteralType::False)
                             }
                         }
                         _ => {
@@ -225,11 +154,11 @@ impl Interpreter {
                         }
                     },
                     BinaryOperator::LessThanEqual => match (left_value, right_value) {
-                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
                             if num1 <= num2 {
-                                Ok(DynamicType::True)
+                                Ok(LiteralType::True)
                             } else {
-                                Ok(DynamicType::False)
+                                Ok(LiteralType::False)
                             }
                         }
                         _ => {
@@ -240,11 +169,11 @@ impl Interpreter {
                     },
 
                     BinaryOperator::GreaterThan => match (left_value, right_value) {
-                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
                             if num1 > num2 {
-                                Ok(DynamicType::True)
+                                Ok(LiteralType::True)
                             } else {
-                                Ok(DynamicType::False)
+                                Ok(LiteralType::False)
                             }
                         }
                         _ => {
@@ -255,11 +184,11 @@ impl Interpreter {
                     },
 
                     BinaryOperator::GreaterThanEqual => match (left_value, right_value) {
-                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
+                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
                             if num1 >= num2 {
-                                Ok(DynamicType::True)
+                                Ok(LiteralType::True)
                             } else {
-                                Ok(DynamicType::False)
+                                Ok(LiteralType::False)
                             }
                         }
                         _ => {
@@ -270,8 +199,8 @@ impl Interpreter {
                     },
 
                     BinaryOperator::Minus => match (left_value, right_value) {
-                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
-                            Ok(DynamicType::Number(num1 - num2))
+                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
+                            Ok(LiteralType::Number(num1 - num2))
                         }
                         _ => {
                             return Err(LoxError::RuntimeError(
@@ -280,8 +209,8 @@ impl Interpreter {
                         }
                     },
                     BinaryOperator::Multiply => match (left_value, right_value) {
-                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
-                            Ok(DynamicType::Number(num1 * num2))
+                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
+                            Ok(LiteralType::Number(num1 * num2))
                         }
                         _ => {
                             return Err(LoxError::RuntimeError(
@@ -290,8 +219,8 @@ impl Interpreter {
                         }
                     },
                     BinaryOperator::Divide => match (left_value, right_value) {
-                        (DynamicType::Number(num1), DynamicType::Number(num2)) => {
-                            Ok(DynamicType::Number(num1 / num2))
+                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
+                            Ok(LiteralType::Number(num1 / num2))
                         }
                         _ => {
                             return Err(LoxError::RuntimeError(
@@ -303,7 +232,7 @@ impl Interpreter {
             }
             Expression::Identifier(name) => {
                 if let Some(value) = self.environment.lookup_global(&name) {
-                    Ok(value.clone()) // Find a better way to refer to the value stored in the environment
+                    return Ok(value.clone()); // Find a better way to do lookup without copying
                 } else {
                     let name_str = std::str::from_utf8(&name).unwrap();
                     return Err(LoxError::RuntimeError(format!(

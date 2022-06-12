@@ -76,12 +76,25 @@ impl Debug for BinaryOperator {
     }
 }
 
+#[derive(Clone)]
 pub enum LiteralType {
     Number(f64),
     String(Vec<u8>),
     True,
     False,
     Nil,
+}
+
+impl LiteralType {
+    pub fn take(&mut self) -> Self {
+        match self {
+            Self::Number(arg0) => Self::Number(std::mem::take(arg0)),
+            Self::String(arg0) => Self::String(std::mem::take(arg0)),
+            Self::True => Self::True,
+            Self::False => Self::False,
+            Self::Nil => Self::Nil,
+        }
+    }
 }
 
 impl Debug for LiteralType {
@@ -96,13 +109,62 @@ impl Debug for LiteralType {
     }
 }
 
-pub struct Parser<'a> {
-    tokens: &'a [Token], // The tokens are owned by the scanner
+impl PartialEq for LiteralType {
+    fn eq(&self, other: &Self) -> bool {
+        if let (LiteralType::Number(value1), LiteralType::Number(value2)) = (&self, &other) {
+            return value1 == value2;
+        }
+        if let (LiteralType::String(value1), LiteralType::String(value2)) = (&self, &other) {
+            return value1 == value2;
+        }
+        return self == other;
+    }
+}
+
+impl From<bool> for LiteralType {
+    fn from(v: bool) -> LiteralType {
+        if v {
+            LiteralType::True
+        } else {
+            LiteralType::False
+        }
+    }
+}
+
+impl std::fmt::Display for LiteralType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LiteralType::Number(number) => {
+                write!(f, "{}", number)
+            }
+            LiteralType::String(u8_vec) => {
+                let result = std::str::from_utf8(u8_vec);
+
+                match result {
+                    Ok(str_val) => write!(f, "{}", str_val),
+                    Err(_) => write!(f, "UTF decoding error"),
+                }
+            }
+            LiteralType::True => {
+                write!(f, "True")
+            }
+            LiteralType::False => {
+                write!(f, "False")
+            }
+            LiteralType::Nil => {
+                write!(f, "Nil")
+            }
+        }
+    }
+}
+
+pub struct Parser {
+    tokens: Vec<Token>,
     index: usize,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new<'b: 'a>(tokens: &'b [Token]) -> Self {
+impl Parser {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Parser { tokens, index: 0 }
     }
 
@@ -144,31 +206,41 @@ impl<'a> Parser<'a> {
     // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
     fn variable_declaration(&mut self) -> Result<Statement, LoxError> {
         // We expect an identifier after the "var keyword"
-        match &self.tokens[self.index].token_type {
+        let identifier_name;
+        match &mut self.tokens[self.index].token_type {
             TokenType::Identifier(name) => {
                 self.index += 1; // Move past the identifier name
-                match self.tokens[self.index].token_type {
-                    TokenType::Equal => {
-                        self.index += 1; // Move past the "="
-                        let expr = self.expression()?; // Parse the expression
-                        if let TokenType::Semicolon = self.tokens[self.index].token_type {
-                            self.index += 1; // Move past the semi-colon
-                            return Ok(Statement::VariableDeclaration(name.clone(), expr));
-                        }
-                        Err(LoxError::ParserError(
-                            "Expected semi-colon at the end of variable declaration".to_string(),
-                        ))
-                    }
-                    _ => Err(LoxError::ParserError(
-                        "Expected  \"=\" after keyword IDENTIFIER  in variable declaration"
-                            .to_string(),
-                    )),
-                }
+                identifier_name = std::mem::take(name);
             }
-            _ => Err(LoxError::ParserError(
-                "Expected identifier after keyword \"var\" in variable declaration".to_string(),
-            )),
+            _ => {
+                return Err(LoxError::ParserError(
+                    "Expected identifier after keyword \"var\" in variable declaration".to_string(),
+                ))
+            }
         }
+
+        match self.tokens[self.index].token_type {
+            TokenType::Equal => {
+                self.index += 1;
+            }
+            _ => {
+                return Err(LoxError::ParserError(
+                    "Expected \"=\" after identifier name in variable declaration".to_string(),
+                ))
+            }
+        }
+        let expression = self.expression()?;
+        match self.tokens[self.index].token_type {
+            TokenType::Semicolon => {
+                self.index += 1;
+            }
+            _ => {
+                return Err(LoxError::ParserError(
+                    "Expected \";\" at the end of variable declaration".to_string(),
+                ))
+            }
+        }
+        Ok(Statement::VariableDeclaration(identifier_name, expression))
     }
 
     // statement → exprStmt | printStmt ;
@@ -395,7 +467,7 @@ impl<'a> Parser<'a> {
      * primary → NUMBER | STRING | "true" | "false" | "nil"  | "(" expression ") | IDENTIFIER"
      */
     fn primary(&mut self) -> Result<Box<Expression>, LoxError> {
-        match &self.tokens[self.index].token_type {
+        match &mut self.tokens[self.index].token_type {
             TokenType::False => {
                 self.index += 1;
                 Ok(Box::new(Expression::Literal(LiteralType::False)))
@@ -411,13 +483,13 @@ impl<'a> Parser<'a> {
             TokenType::StringLiteral(value) => {
                 self.index += 1;
                 Ok(Box::new(Expression::Literal(LiteralType::String(
-                    value.clone(), // Would have been nice to reuse the allocation made for the string by the scanner
+                    std::mem::take(value),
                 ))))
             }
             TokenType::NumberLiteral(value) => {
                 self.index += 1;
                 Ok(Box::new(Expression::Literal(LiteralType::Number(
-                    value.clone(),
+                    std::mem::take(value),
                 ))))
             }
             TokenType::LeftParen => {
@@ -436,7 +508,9 @@ impl<'a> Parser<'a> {
             }
             TokenType::Identifier(identifier_name) => {
                 self.index += 1;
-                Ok(Box::new(Expression::Identifier(identifier_name.clone())))
+                Ok(Box::new(Expression::Identifier(std::mem::take(
+                    identifier_name,
+                ))))
             }
             _ => Err(LoxError::ParserError(format!(
                 "Parser error, current index:{}, line number:{}",

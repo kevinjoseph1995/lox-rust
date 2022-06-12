@@ -14,6 +14,7 @@ mod tokens;
 use error::LoxError;
 use global_handle::GlobalHandle;
 use parser::Parser;
+use scanner::scan_tokens;
 
 fn main() -> Result<(), LoxError> {
     let args: Vec<_> = env::args().collect();
@@ -75,10 +76,9 @@ fn run(line: &str, global_handle: &mut GlobalHandle) {
 
 fn run_wrapper(line: &str, global_handle: &mut GlobalHandle) -> Result<(), LoxError> {
     // Scan
-    let mut tokens = global_handle.scanner.scan_tokens(&(line.as_bytes()))?;
-    println!("{:#?}", tokens); //  Uncomment me to list out the scanned tokens
-                               // Parse
-    let mut parser = Parser::new(&mut tokens);
+    let tokens = scan_tokens(&(line.as_bytes()))?;
+    println!("{:?}", tokens);
+    let mut parser = Parser::new(tokens);
     let program = parser.parse()?;
 
     ast_printer::visualize_program_ast(&program); //  Uncomment me to visualize the AST
