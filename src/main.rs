@@ -77,7 +77,7 @@ fn run(line: &str, global_handle: &mut GlobalHandle) {
 fn run_wrapper(line: &str, global_handle: &mut GlobalHandle) -> Result<(), LoxError> {
     // Scan
     let tokens = scan_tokens(&(line.as_bytes()))?;
-    println!("{:?}", tokens);
+    // println!("{:?}", tokens);
     let mut parser = Parser::new(tokens);
     let program = parser.parse()?;
 
