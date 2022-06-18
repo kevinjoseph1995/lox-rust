@@ -4,6 +4,7 @@ var a = 10;
     var b = a;
     print b;
 }
+                ~
 {
     {
         {
@@ -21,6 +22,6 @@ var a = 10;
         }
     }
 }
-
+                       
 var b = 10;
 print b;

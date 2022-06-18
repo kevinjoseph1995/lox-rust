@@ -3,7 +3,7 @@ use std::fmt::Display;
 #[derive(Debug)]
 pub enum LoxError {
     IOError(std::io::Error),
-    LexErr(String),
+    LexErr,
     ParserError(String),
     RuntimeError(String),
     InternalError(String),
@@ -15,8 +15,8 @@ impl Display for LoxError {
             LoxError::IOError(err) => {
                 write!(f, "{}", err.to_string())
             }
-            LoxError::LexErr(err) => {
-                write!(f, "{}", err)
+            LoxError::LexErr => {
+                write!(f, "Lexer Error")
             }
             LoxError::ParserError(err) => {
                 write!(f, "{}", err)
