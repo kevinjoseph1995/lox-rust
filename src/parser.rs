@@ -21,6 +21,7 @@ pub enum Statement {
     Expression(Box<Expression>),
     Print(Box<Expression>),
     VariableDeclaration(Vec<u8>, Box<Expression>), // Identifier name and corresponding expression
+    Block(Vec<Statement>),
 }
 
 pub enum Expression {
@@ -243,15 +244,23 @@ impl Parser {
         Ok(Statement::VariableDeclaration(identifier_name, expression))
     }
 
-    // statement → exprStmt | printStmt ;
+    // statement → exprStmt | printStmt | block;
     fn statement(&mut self) -> Result<Statement, LoxError> {
         match self.tokens[self.index].token_type {
             TokenType::Print => {
+                // printStmt -> "print" expression ";"
                 self.index += 1;
                 let expr = self.get_expression_for_statement()?;
                 return Ok(Statement::Print(expr));
             }
+            TokenType::LeftBrace => {
+                self.index += 1;
+                let block_statements = self.block()?;
+                return Ok(Statement::Block(block_statements));
+            }
+
             _ => {
+                // exprStmt -> expression ";"
                 let expr = self.get_expression_for_statement()?;
                 return Ok(Statement::Expression(expr));
             }
@@ -273,6 +282,30 @@ impl Parser {
             }
         }
     }
+    // block  → "{" declaration* "}" ;
+    fn block(&mut self) -> Result<Vec<Statement>, LoxError> {
+        let mut declarations: Vec<Statement> = Vec::new();
+        let left_paren_index = self.index - 1;
+        assert!(self.tokens[left_paren_index].token_type == TokenType::LeftBrace);
+        loop {
+            match self.tokens[self.index].token_type {
+                TokenType::RightBrace => {
+                    self.index += 1;
+                    return Ok(declarations);
+                }
+                TokenType::Eof => {
+                    return Err(LoxError::ParserError(
+                       format!( "Unterminated block, missing a \"}}\", corresponding \"{{\" is found on line {}", self.tokens[left_paren_index].line_number),
+                    ));
+                }
+                _ => {
+                    let new_declaration = self.declaration()?;
+                    declarations.push(new_declaration);
+                }
+            }
+        }
+    }
+
     /*
         Expression grammar for Lox from https://craftinginterpreters.com/parsing-expressions.html
         expression     → assignment ;

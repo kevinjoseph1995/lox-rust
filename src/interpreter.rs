@@ -2,13 +2,13 @@ use crate::error::LoxError;
 use crate::parser::{BinaryOperator, Expression, LiteralType, Program, Statement, UnaryOperator};
 
 struct Environment {
-    global_variables: Vec<(Vec<u8>, LiteralType)>,
+    variables: Vec<(Vec<u8>, LiteralType)>,
 }
 
 impl Environment {
     fn new() -> Self {
         Environment {
-            global_variables: Vec::new(),
+            variables: Vec::new(),
         }
     }
 
@@ -27,7 +27,7 @@ impl Environment {
 
     fn lookup_global(&self, name: &Vec<u8>) -> Option<&LiteralType> {
         if let Some(name_value_pair) = self
-            .global_variables
+            .variables
             .iter()
             .find(|x| Self::name_comp(&(*x).0, name))
         {
@@ -36,45 +36,97 @@ impl Environment {
         return None;
     }
 
-    fn update_global(&mut self, name: &Vec<u8>, value: LiteralType) {
+    fn update_or_add(&mut self, name: &Vec<u8>, value: LiteralType) {
         if let Some(name_value_pair) = self
-            .global_variables
+            .variables
             .iter_mut()
             .find(|x| Self::name_comp(&(*x).0, &name))
         {
             name_value_pair.1 = value
         } else {
-            self.global_variables.push((name.clone(), value));
+            self.variables.push((name.clone(), value));
+        }
+    }
+    fn update(&mut self, name: &Vec<u8>, value: &LiteralType) -> bool {
+        if let Some(name_value_pair) = self
+            .variables
+            .iter_mut()
+            .find(|x| Self::name_comp(&(*x).0, &name))
+        {
+            name_value_pair.1 = value.clone();
+            return true;
+        } else {
+            return false;
         }
     }
 }
 
 pub struct Interpreter {
-    environment: Environment,
+    environment_stack: Vec<Environment>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
-            environment: Environment::new(),
+            environment_stack: vec![Environment::new()], // Push the global environment onto the stack
         }
+    }
+
+    pub fn lookup_variable(&self, name: &Vec<u8>) -> Option<&LiteralType> {
+        for env in self.environment_stack.iter().rev() {
+            if let Some(value) = env.lookup_global(name) {
+                return Some(value);
+            }
+        }
+        None
+    }
+
+    fn update(&mut self, name: &Vec<u8>, value: LiteralType) -> bool {
+        for env in self.environment_stack.iter_mut().rev() {
+            if env.update(name, &value) {
+                return true;
+            }
+        }
+        return false;
     }
 
     pub fn interpret(&mut self, program: Program) -> Result<(), LoxError> {
         let mut statements = program.statements;
         for statement in &mut statements {
-            match statement {
-                Statement::Expression(expression) => {
-                    self.evaluate(expression)?;
+            self.handle_statement(statement)?;
+        }
+        Ok(())
+    }
+
+    pub fn handle_statement(&mut self, statement: &mut Statement) -> Result<(), LoxError> {
+        match statement {
+            Statement::Expression(expression) => {
+                self.evaluate(expression)?;
+            }
+            Statement::Print(expression) => {
+                let result = self.evaluate(expression)?;
+                println!("{}", result)
+            }
+            Statement::VariableDeclaration(name, expression) => {
+                let value = self.evaluate(expression)?;
+                match self.environment_stack.last_mut() {
+                    Some(environment) => {
+                        environment.update_or_add(name, value);
+                    }
+                    None => {
+                        return Err(LoxError::InternalError(
+                            "Empty environment stack, something really bad happened".to_string(),
+                        ))
+                    }
                 }
-                Statement::Print(expression) => {
-                    let result = self.evaluate(expression)?;
-                    println!("{}", result)
+            }
+            Statement::Block(block_statements) => {
+                // Entered new scope
+                self.environment_stack.push(Environment::new());
+                for statement in block_statements {
+                    self.handle_statement(statement)?;
                 }
-                Statement::VariableDeclaration(name, expression) => {
-                    let value = self.evaluate(expression)?;
-                    self.environment.update_global(&name, value);
-                }
+                self.environment_stack.pop();
             }
         }
         Ok(())
@@ -227,20 +279,19 @@ impl Interpreter {
                 }
             }
             Expression::Identifier(name) => {
-                if let Some(value) = self.environment.lookup_global(&name) {
+                if let Some(value) = self.lookup_variable(&name) {
                     return Ok(value.clone()); // Find a better way to do lookup without copying
                 } else {
                     let name_str = std::str::from_utf8(&name).unwrap();
                     return Err(LoxError::RuntimeError(format!(
-                        "Could not find {} in global namespace",
+                        "Use of undeclared variable {}",
                         name_str
                     )));
                 }
             }
             Expression::Assignment(name, expr) => {
-                if let Some(_) = self.environment.lookup_global(&name) {
-                    let new_value = self.evaluate(expr)?;
-                    self.environment.update_global(name, new_value);
+                let new_value = self.evaluate(expr)?;
+                if self.update(name, new_value) {
                     return Ok(LiteralType::Nil);
                 } else {
                     return Err(LoxError::RuntimeError(format!(

@@ -1,0 +1,26 @@
+var a = 10;
+{
+    print a;
+    var b = a;
+    print b;
+}
+{
+    {
+        {
+            {
+                var c = 99;
+                {
+                    {
+                        var b = a + 20;
+                        print b;
+                        b = c + a;
+                        print b;
+                    }
+                }
+            }
+        }
+    }
+}
+
+var b = 10;
+print b;

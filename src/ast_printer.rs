@@ -3,20 +3,29 @@ use crate::parser::{Expression, Program, Statement};
 #[allow(dead_code)]
 pub fn visualize_program_ast(program: &Program) {
     for statement in &program.statements {
-        match statement {
-            Statement::Expression(expression) => {
-                println!("Expression statement {}", stringify(&expression));
-            }
-            Statement::Print(expression) => {
-                println!("Print statement: {}", stringify(&expression));
-            }
-            Statement::VariableDeclaration(variable_name, expression) => {
-                let variable_name = std::str::from_utf8(variable_name).unwrap();
-                println!(
-                    "Varaible declaration var {} = {}",
-                    variable_name,
-                    stringify(&expression)
-                );
+        handle_statement(statement);
+    }
+}
+
+fn handle_statement(statement: &Statement) {
+    match statement {
+        Statement::Expression(expression) => {
+            println!("Expression statement {}", stringify(&expression));
+        }
+        Statement::Print(expression) => {
+            println!("Print statement: {}", stringify(&expression));
+        }
+        Statement::VariableDeclaration(variable_name, expression) => {
+            let variable_name = std::str::from_utf8(variable_name).unwrap();
+            println!(
+                "Varaible declaration var {} = {}",
+                variable_name,
+                stringify(&expression)
+            );
+        }
+        Statement::Block(block_statements) => {
+            for statement in block_statements {
+                handle_statement(statement);
             }
         }
     }
