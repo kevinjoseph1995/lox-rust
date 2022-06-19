@@ -159,6 +159,18 @@ impl std::fmt::Display for LiteralType {
     }
 }
 
+fn report_error(error: LoxError, current_token: Option<&Token>) {
+    if let Some(token) = current_token {
+        eprintln!(
+            "\x1b[1;31mError: {}. Processing token on line {} Col-[{}:{}] \x1b[0m",
+            error,
+            token.line_number,
+            token.start,
+            token.start + token.length
+        );
+    }
+}
+
 pub struct Parser {
     tokens: Vec<Token>,
     index: usize,
@@ -180,15 +192,29 @@ impl Parser {
     */
     fn program(&mut self) -> Result<Program, LoxError> {
         let mut program = Program::new();
+        let mut found_error = false;
         loop {
             if self.index == self.tokens.len()
                 || self.tokens[self.index].token_type == TokenType::Eof
             {
                 break;
             } else {
-                let statement = self.declaration()?;
-                program.statements.push(statement)
+                match self.declaration() {
+                    Ok(statement) => program.statements.push(statement),
+                    Err(error) => {
+                        if self.index < self.tokens.len() {
+                            report_error(error, Some(&self.tokens[self.index]))
+                        } else {
+                            report_error(error, None);
+                        }
+                        found_error = true;
+                        self.index += 1;
+                    }
+                }
             }
+        }
+        if found_error {
+            return Err(LoxError::ParserError("Found parse error".to_string()));
         }
         Ok(program)
     }

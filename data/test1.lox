@@ -1,10 +1,19 @@
-
-  
-class A {}
-
-fun f() {
-  class B < A {}
-  return B;
+var a = "global a";
+var b = "global b";
+var c = "global c";
+{
+  var a = "outer a";
+  var b = "outer b";
+  {
+    var a = "inner a";
+    print a;
+    print b;
+    print c;
+  }
+  print a;
+  print b;
+  print c;
 }
-
-print f(); // expect: B
+print a;
+print b;
+print c;
