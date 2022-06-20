@@ -1,0 +1,6 @@
+var a = false;
+if (a) {
+    print a;
+} else {
+    print "Else-branch";
+}

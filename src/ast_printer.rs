@@ -28,6 +28,19 @@ fn handle_statement(statement: &Statement) {
                 handle_statement(statement);
             }
         }
+        Statement::If(condition, then_clause, else_clause) => {
+            println!("If statement");
+            println!("  condition:{}", stringify(condition.as_ref()));
+            println!("  then statement:");
+            handle_statement(then_clause.as_ref());
+            match else_clause {
+                Some(stmt) => {
+                    println!("  else statement:");
+                    handle_statement(stmt.as_ref())
+                }
+                None => {}
+            }
+        }
     }
 }
 

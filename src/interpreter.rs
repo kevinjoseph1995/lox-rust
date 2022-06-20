@@ -128,6 +128,25 @@ impl Interpreter {
                 }
                 self.environment_stack.pop();
             }
+            Statement::If(condition, then_clause, else_clause) => {
+                let condition_value = self.evaluate(condition)?;
+                match condition_value {
+                    LiteralType::True => self.handle_statement(then_clause.as_mut())?,
+                    LiteralType::Number(value) => {
+                        if value != 0 as f64 {
+                            self.handle_statement(then_clause.as_mut())?;
+                        } else if let Some(else_clause) = else_clause {
+                            self.handle_statement(else_clause.as_mut())?;
+                        }
+                    }
+                    LiteralType::String(_) => self.handle_statement(then_clause.as_mut())?,
+                    _ => {
+                        if let Some(else_clause) = else_clause {
+                            self.handle_statement(else_clause.as_mut())?;
+                        }
+                    }
+                }
+            }
         }
         Ok(())
     }

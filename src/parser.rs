@@ -22,6 +22,7 @@ pub enum Statement {
     Print(Box<Expression>),
     VariableDeclaration(Vec<u8>, Box<Expression>), // Identifier name and corresponding expression
     Block(Vec<Statement>),
+    If(Box<Expression>, Box<Statement>, Option<Box<Statement>>), // (Condition, Then-clause, Else-clause)
 }
 
 pub enum Expression {
@@ -188,7 +189,7 @@ impl Parser {
     /*
         program        → declaration* EOF ;
         declaration    → varDecl |  statement ;
-        statement      → exprStmt | printStmt ;
+        statement      → exprStmt | printStmt | blockStmt | ifStmt;
     */
     fn program(&mut self) -> Result<Program, LoxError> {
         let mut program = Program::new();
@@ -270,7 +271,7 @@ impl Parser {
         Ok(Statement::VariableDeclaration(identifier_name, expression))
     }
 
-    // statement → exprStmt | printStmt | block;
+    // statement      → exprStmt | printStmt | blockStmt | ifStmt;
     fn statement(&mut self) -> Result<Statement, LoxError> {
         match self.tokens[self.index].token_type {
             TokenType::Print => {
@@ -284,7 +285,40 @@ impl Parser {
                 let block_statements = self.block()?;
                 return Ok(Statement::Block(block_statements));
             }
+            TokenType::If => {
+                /*
+                   ifStmt         → "if" "(" expression ")" statement
+                                   ( "else" statement )? ;
 
+                */
+                self.index += 1;
+                if self.tokens[self.index].token_type != TokenType::LeftParen {
+                    return Err(LoxError::ParserError(
+                        "If statement condition must be enclosed in parenthesis. Missing left paren".to_string(),
+                    ));
+                }
+                self.index += 1;
+                let condition = self.expression()?;
+                if self.tokens[self.index].token_type != TokenType::RightParen {
+                    return Err(LoxError::ParserError(
+                        "If statement condition must be enclosed in parenthesis. Missing right paren".to_string(),
+                    ));
+                }
+                self.index += 1;
+
+                let then_statment = self.statement()?;
+
+                if self.tokens[self.index].token_type == TokenType::Else {
+                    self.index += 1;
+                    let stmt = self.statement()?;
+                    return Ok(Statement::If(
+                        condition,
+                        Box::new(then_statment),
+                        Some(Box::new(stmt)),
+                    ));
+                }
+                return Ok(Statement::If(condition, Box::new(then_statment), None));
+            }
             _ => {
                 // exprStmt -> expression ";"
                 let expr = self.get_expression_for_statement()?;
