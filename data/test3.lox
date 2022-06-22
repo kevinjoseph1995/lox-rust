@@ -1,17 +1,5 @@
-var a = false;
-if (a) {
+var a = 10;
+while (a > 0) {
     print a;
-} else {
-    print "Else-branch";
-}
-
-print 1 or 1;
-
-var a = false;
-var b = false;
-
-if (a or b) {
-    print "At least one True";
-} else {
-    print "No True";
+    a = a -1;
 }

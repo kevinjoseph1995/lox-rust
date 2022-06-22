@@ -18,12 +18,13 @@ fn handle_statement(statement: &Statement) {
         Statement::VariableDeclaration(variable_name, expression) => {
             let variable_name = std::str::from_utf8(variable_name).unwrap();
             println!(
-                "Varaible declaration var {} = {}",
+                "Variable declaration var {} = {}",
                 variable_name,
                 stringify(&expression)
             );
         }
         Statement::Block(block_statements) => {
+            println!("Block");
             for statement in block_statements {
                 handle_statement(statement);
             }
@@ -40,6 +41,12 @@ fn handle_statement(statement: &Statement) {
                 }
                 None => {}
             }
+        }
+        Statement::While(condition, statement) => {
+            println!("While statement");
+            println!("  condition:{}", stringify(condition.as_ref()));
+            println!("  statement:");
+            handle_statement(statement.as_ref())
         }
     }
 }

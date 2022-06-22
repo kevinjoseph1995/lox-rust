@@ -154,13 +154,20 @@ impl Interpreter {
                     }
                 }
             }
+            Statement::While(condition_expr, statement) => {
+                let mut condition_value = self.evaluate(condition_expr)?;
+                while is_true_value(&condition_value) {
+                    self.handle_statement(statement.as_mut())?;
+                    condition_value = self.evaluate(condition_expr)?;
+                }
+            }
         }
         Ok(())
     }
 
     fn evaluate(&mut self, expression: &mut Box<Expression>) -> Result<LiteralType, LoxError> {
         match expression.as_mut() {
-            Expression::Literal(literal_type) => Ok(literal_type.take()),
+            Expression::Literal(literal_type) => Ok(literal_type.clone()),
             Expression::Grouping(grouped_expression) => {
                 let value = self.evaluate(grouped_expression)?;
                 Ok(value)

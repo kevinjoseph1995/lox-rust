@@ -23,6 +23,7 @@ pub enum Statement {
     VariableDeclaration(Vec<u8>, Box<Expression>), // Identifier name and corresponding expression
     Block(Vec<Statement>),
     If(Box<Expression>, Box<Statement>, Option<Box<Statement>>), // (Condition, Then-clause, Else-clause)
+    While(Box<Expression>, Box<Statement>),                      // Expr condition, Stmt body
 }
 
 pub enum Expression {
@@ -103,6 +104,7 @@ pub enum LiteralType {
 }
 
 impl LiteralType {
+    #[allow(dead_code)]
     pub fn take(&mut self) -> Self {
         match self {
             Self::Number(arg0) => Self::Number(std::mem::take(arg0)),
@@ -286,7 +288,7 @@ impl Parser {
         Ok(Statement::VariableDeclaration(identifier_name, expression))
     }
 
-    // statement      → exprStmt | printStmt | blockStmt | ifStmt;
+    // statement      → exprStmt | printStmt | blockStmt | ifStmt | whileStmt;
     fn statement(&mut self) -> Result<Statement, LoxError> {
         match self.tokens[self.index].token_type {
             TokenType::Print => {
@@ -333,6 +335,26 @@ impl Parser {
                     ));
                 }
                 return Ok(Statement::If(condition, Box::new(then_statment), None));
+            }
+            TokenType::While => {
+                // whileStmt    → "while" "(" expression ")" statement ;
+                self.index += 1;
+                if self.tokens[self.index].token_type != TokenType::LeftParen {
+                    return Err(LoxError::ParserError(
+                        "If statement condition must be enclosed in parenthesis. Missing left paren".to_string(),
+                    ));
+                }
+                self.index += 1;
+                let condition = self.expression()?;
+                if self.tokens[self.index].token_type != TokenType::RightParen {
+                    return Err(LoxError::ParserError(
+                        "If statement condition must be enclosed in parenthesis. Missing right paren".to_string(),
+                    ));
+                }
+                self.index += 1;
+                let statement = self.statement()?;
+
+                return Ok(Statement::While(condition, Box::new(statement)));
             }
             _ => {
                 // exprStmt -> expression ";"
