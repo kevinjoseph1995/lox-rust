@@ -29,6 +29,7 @@ pub enum Expression {
     Literal(LiteralType),
     Unary(UnaryOperator, Box<Expression>),
     Binary(Box<Expression>, BinaryOperator, Box<Expression>),
+    Logical(Box<Expression>, LogicalOperator, Box<Expression>),
     Grouping(Box<Expression>),
     Identifier(Vec<u8>),
     Assignment(Vec<u8>, Box<Expression>),
@@ -74,6 +75,20 @@ impl Debug for BinaryOperator {
             Self::Minus => write!(f, "-"),
             Self::Multiply => write!(f, "*"),
             Self::Divide => write!(f, "/"),
+        }
+    }
+}
+
+pub enum LogicalOperator {
+    Or,
+    And,
+}
+
+impl Debug for LogicalOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Or => write!(f, "or"),
+            Self::And => write!(f, "and"),
         }
     }
 }
@@ -370,7 +385,9 @@ impl Parser {
         Expression grammar for Lox from https://craftinginterpreters.com/parsing-expressions.html
         expression     → assignment ;
         assignment     → IDENTIFIER "=" assignment
-                        | equality ;
+                        | logic_or ;
+        logic_or       → logic_and ( "or" logic_and )* ;
+        logic_and      → equality ( "and" equality )* ;
         equality       → comparison ( ( "!=" | "==" ) comparison )* ;
         comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
         term           → factor ( ( "-" | "+" ) factor )* ;
@@ -387,7 +404,7 @@ impl Parser {
 
     // assignment     → IDENTIFIER "=" assignment | equality ;
     fn assignment(&mut self) -> Result<Box<Expression>, LoxError> {
-        let mut lhs = self.equality()?;
+        let mut lhs = self.logic_or()?;
 
         if self.tokens[self.index].token_type == TokenType::Equal {
             self.index += 1; // Move past the "="
@@ -401,10 +418,36 @@ impl Parser {
             }
             // The LHS wasn't an L-value, returning error here, maybe don't?
             return Err(LoxError::ParserError(
-                "Expected L-value for assignemnt".to_string(),
+                "Expected L-value for assignment".to_string(),
             ));
         }
 
+        return Ok(lhs);
+    }
+
+    // logic_or → logic_and ( "or" logic_and )* ;
+    fn logic_or(&mut self) -> Result<Box<Expression>, LoxError> {
+        let lhs = self.logic_and()?;
+        if let TokenType::Or = self.tokens[self.index].token_type {
+            self.index += 1;
+            let rhs = self.logic_and()?;
+            return Ok(Box::new(Expression::Logical(lhs, LogicalOperator::Or, rhs)));
+        }
+        return Ok(lhs);
+    }
+
+    // logic_and → equality ( "and" equality )* ;
+    fn logic_and(&mut self) -> Result<Box<Expression>, LoxError> {
+        let lhs = self.equality()?;
+        if let TokenType::And = self.tokens[self.index].token_type {
+            self.index += 1;
+            let rhs = self.equality()?;
+            return Ok(Box::new(Expression::Logical(
+                lhs,
+                LogicalOperator::And,
+                rhs,
+            )));
+        }
         return Ok(lhs);
     }
 

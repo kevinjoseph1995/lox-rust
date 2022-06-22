@@ -71,5 +71,8 @@ fn stringify(expression: &Expression) -> String {
             let name_str = std::str::from_utf8(name).unwrap();
             format!("(Assignment {} = {:?})", name_str, stringify(&expression))
         }
+        Expression::Logical(lhs, op, rhs) => {
+            format!("(Logical {} {:?} {})", stringify(&lhs), op, stringify(&rhs))
+        }
     }
 }

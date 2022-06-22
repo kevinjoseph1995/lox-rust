@@ -1,5 +1,7 @@
 use crate::error::LoxError;
-use crate::parser::{BinaryOperator, Expression, LiteralType, Program, Statement, UnaryOperator};
+use crate::parser::{
+    BinaryOperator, Expression, LiteralType, LogicalOperator, Program, Statement, UnaryOperator,
+};
 
 struct Environment {
     variables: Vec<(Vec<u8>, LiteralType)>,
@@ -58,6 +60,20 @@ impl Environment {
         } else {
             return false;
         }
+    }
+}
+
+fn is_true_value(value: &LiteralType) -> bool {
+    match value {
+        LiteralType::True => true,
+        LiteralType::Number(num) => {
+            if num.clone() != 0 as f64 {
+                return true;
+            }
+            false
+        }
+        LiteralType::String(_) => true,
+        _ => false,
     }
 }
 
@@ -130,20 +146,11 @@ impl Interpreter {
             }
             Statement::If(condition, then_clause, else_clause) => {
                 let condition_value = self.evaluate(condition)?;
-                match condition_value {
-                    LiteralType::True => self.handle_statement(then_clause.as_mut())?,
-                    LiteralType::Number(value) => {
-                        if value != 0 as f64 {
-                            self.handle_statement(then_clause.as_mut())?;
-                        } else if let Some(else_clause) = else_clause {
-                            self.handle_statement(else_clause.as_mut())?;
-                        }
-                    }
-                    LiteralType::String(_) => self.handle_statement(then_clause.as_mut())?,
-                    _ => {
-                        if let Some(else_clause) = else_clause {
-                            self.handle_statement(else_clause.as_mut())?;
-                        }
+                if is_true_value(&condition_value) {
+                    self.handle_statement(then_clause.as_mut())?;
+                } else {
+                    if let Some(else_clause) = else_clause {
+                        self.handle_statement(else_clause.as_mut())?;
                     }
                 }
             }
@@ -316,6 +323,31 @@ impl Interpreter {
                     return Err(LoxError::RuntimeError(format!(
                         "Reference to undeclared variable"
                     )));
+                }
+            }
+            Expression::Logical(lhs, op, rhs) => {
+                let lhs_value = self.evaluate(lhs)?;
+                match op {
+                    LogicalOperator::And => {
+                        if !is_true_value(&lhs_value) {
+                            return Ok(LiteralType::False);
+                        }
+                        let rhs_value = self.evaluate(rhs)?;
+                        if is_true_value(&rhs_value) {
+                            return Ok(LiteralType::True);
+                        }
+                        return Ok(LiteralType::False);
+                    }
+                    LogicalOperator::Or => {
+                        if is_true_value(&lhs_value) {
+                            return Ok(LiteralType::True);
+                        }
+                        let rhs_value = self.evaluate(rhs)?;
+                        if is_true_value(&rhs_value) {
+                            return Ok(LiteralType::True);
+                        }
+                        return Ok(LiteralType::False);
+                    }
                 }
             }
         }
