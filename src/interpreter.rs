@@ -67,7 +67,7 @@ fn is_true_value(value: &LiteralType) -> bool {
     match value {
         LiteralType::True => true,
         LiteralType::Number(num) => {
-            if num.clone() != 0 as f64 {
+            if num.clone() != 0.0f64 {
                 return true;
             }
             false

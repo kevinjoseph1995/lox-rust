@@ -3,11 +3,12 @@ use crate::parser::{Expression, Program, Statement};
 #[allow(dead_code)]
 pub fn visualize_program_ast(program: &Program) {
     for statement in &program.statements {
-        handle_statement(statement);
+        handle_statement(statement, 0);
     }
 }
 
-fn handle_statement(statement: &Statement) {
+fn handle_statement(statement: &Statement, level: usize) {
+    print!("{:<width$}", "", width = level);
     match statement {
         Statement::Expression(expression) => {
             println!("Expression statement {}", stringify(&expression));
@@ -26,27 +27,25 @@ fn handle_statement(statement: &Statement) {
         Statement::Block(block_statements) => {
             println!("Block");
             for statement in block_statements {
-                handle_statement(statement);
+                handle_statement(statement, level + 2);
             }
         }
         Statement::If(condition, then_clause, else_clause) => {
             println!("If statement");
             println!("  condition:{}", stringify(condition.as_ref()));
             println!("  then statement:");
-            handle_statement(then_clause.as_ref());
+            handle_statement(then_clause.as_ref(), level + 2);
             match else_clause {
                 Some(stmt) => {
                     println!("  else statement:");
-                    handle_statement(stmt.as_ref())
+                    handle_statement(stmt.as_ref(), level + 2)
                 }
                 None => {}
             }
         }
         Statement::While(condition, statement) => {
-            println!("While statement");
-            println!("  condition:{}", stringify(condition.as_ref()));
-            println!("  statement:");
-            handle_statement(statement.as_ref())
+            println!("While {}", stringify(condition.as_ref()));
+            handle_statement(statement.as_ref(), level + 2)
         }
     }
 }

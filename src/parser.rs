@@ -336,19 +336,101 @@ impl Parser {
                 }
                 return Ok(Statement::If(condition, Box::new(then_statment), None));
             }
+            TokenType::For => {
+                /* We "desugar" the for loop into a block statement composed of a while statement and other expression statements
+                    for(var i = 0; i < 10; i = i + 1)
+                        print i;
+
+                    is the same as:
+
+                    {
+                        var i = 0;
+                        while (i < 10) {
+                            print i;
+                            i = i + 1;
+                        }
+                    }
+                */
+                self.index += 1;
+                if self.tokens[self.index].token_type != TokenType::LeftParen {
+                    return Err(LoxError::ParserError(
+                        "For statement's initializer, condition and update expression should be enclosed in parenthesis. Mission left parenthesis".to_string(),
+                    ));
+                }
+                // Initializer
+                let mut initializer: Option<Statement> = None;
+                self.index += 1;
+                if self.tokens[self.index].token_type == TokenType::Semicolon {
+                    self.index += 1; // Move past the semi-colon
+                } else {
+                    if self.tokens[self.index].token_type == TokenType::Var {
+                        self.index += 1;
+                        let initializer_stmt = self.variable_declaration()?;
+                        initializer = Some(initializer_stmt);
+                    } else {
+                        let initializer_expr = self.get_expression_for_statement()?;
+                        initializer = Some(Statement::Expression(initializer_expr));
+                    }
+                }
+                // Condition
+                let mut condition: Option<Box<Expression>> = None;
+                if self.tokens[self.index].token_type == TokenType::Semicolon {
+                    self.index += 1; // Move past the semi-colon
+                } else {
+                    let condition_expr = self.get_expression_for_statement()?;
+                    condition = Some(condition_expr);
+                }
+                // Update
+                let mut update: Option<Box<Expression>> = None;
+                if self.tokens[self.index].token_type == TokenType::RightParen {
+                    self.index += 1;
+                } else {
+                    let expr = self.expression()?;
+                    if self.tokens[self.index].token_type != TokenType::RightParen {
+                        return Err(LoxError::ParserError(
+                            "For statement's initializer, condition and update expression should be enclosed in parenthesis. Mission right parenthesis".to_string(),
+                        ));
+                    }
+                    update = Some(expr);
+                    self.index += 1; // Move past the right paren
+                }
+                // Main body
+                let body = self.statement()?;
+
+                // Compose everything now
+                let mut outer_block_statements: Vec<Statement> = Vec::new();
+                if let Some(initializer_stmt) = initializer {
+                    outer_block_statements.push(initializer_stmt);
+                }
+                if condition.is_none() {
+                    condition = Some(Box::new(Expression::Literal(LiteralType::True)));
+                }
+
+                let mut inner_block_statements: Vec<Statement> = vec![body];
+                if let Some(update_expr) = update {
+                    inner_block_statements.push(Statement::Expression(update_expr));
+                }
+
+                outer_block_statements.push(Statement::While(
+                    condition.unwrap(),
+                    Box::new(Statement::Block(inner_block_statements)),
+                ));
+
+                return Ok(Statement::Block(outer_block_statements));
+            }
             TokenType::While => {
                 // whileStmt    → "while" "(" expression ")" statement ;
                 self.index += 1;
                 if self.tokens[self.index].token_type != TokenType::LeftParen {
                     return Err(LoxError::ParserError(
-                        "If statement condition must be enclosed in parenthesis. Missing left paren".to_string(),
+                        "While statement condition must be enclosed in parenthesis. Missing left parenthesis".to_string(),
                     ));
                 }
                 self.index += 1;
                 let condition = self.expression()?;
                 if self.tokens[self.index].token_type != TokenType::RightParen {
                     return Err(LoxError::ParserError(
-                        "If statement condition must be enclosed in parenthesis. Missing right paren".to_string(),
+                        "While statement condition must be enclosed in parenthesis. Missing right parenthesis".to_string(),
                     ));
                 }
                 self.index += 1;
