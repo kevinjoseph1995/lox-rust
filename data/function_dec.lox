@@ -1,0 +1,12 @@
+fun my_function() {
+    print "Hello world";
+}
+
+
+fun my_function2() {
+    my_function();
+    fun my_nested_function() {
+        print "Calling from nested function";
+        my_function();
+    }
+}

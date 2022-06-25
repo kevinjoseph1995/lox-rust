@@ -23,6 +23,7 @@ pub enum Statement {
     Expression(Box<Expression>),
     Print(Box<Expression>),
     VariableDeclaration(Vec<u8>, Box<Expression>), // Identifier name and corresponding expression
+    FunctionDeclaration(Vec<u8>, Vec<Vec<u8>>, Box<Statement>), // Function name, parameters and body
     Block(Vec<Statement>),
     If(Box<Expression>, Box<Statement>, Option<Box<Statement>>), // (Condition, Then-clause, Else-clause)
     While(Box<Expression>, Box<Statement>),                      // Expr condition, Stmt body
@@ -212,7 +213,7 @@ impl Parser {
 
     /*
         program        → declaration* EOF ;
-        declaration    → varDecl |  statement ;
+        declaration    → funDecl | varDecl |  statement ;
         statement      → exprStmt | printStmt | blockStmt | ifStmt;
     */
     fn program(&mut self) -> Result<Program, LoxError> {
@@ -244,19 +245,79 @@ impl Parser {
         Ok(program)
     }
 
-    // declaration  → varDecl   | statement ;
+    // declaration  → funDecl | varDecl   | statement ;
     fn declaration(&mut self) -> Result<Statement, LoxError> {
         match self.tokens[self.index].token_type {
             TokenType::Var => {
-                self.index += 1;
-                self.variable_declaration()
+                // varDecl → "var" variable";" ;
+                self.index += 1; // Move past the "var"
+                self.variable()
+            }
+            TokenType::Fun => {
+                // funDecl  → "fun" function ;
+                self.index += 1; // Move past the "fun"
+                self.function()
             }
             _ => self.statement(),
         }
     }
 
-    // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
-    fn variable_declaration(&mut self) -> Result<Statement, LoxError> {
+    // function → IDENTIFIER "(" parameters? ")" block ;
+    fn function(&mut self) -> Result<Statement, LoxError> {
+        let function_name;
+        if let TokenType::Identifier(name) = &mut self.tokens[self.index].token_type {
+            function_name = std::mem::take(name);
+        } else {
+            return Err(LoxError::ParserError(
+                "Expected function identifier name after keyword \"fun\"".to_string(),
+            ));
+        }
+        self.index += 1; // Move past the identifier
+
+        if self.tokens[self.index].token_type != TokenType::LeftParen {
+            return Err(LoxError::ParserError(
+                "Function declaration expects \"(\" after identifier in function declaration"
+                    .to_string(),
+            ));
+        }
+
+        self.index += 1; // Move past the left parenthesis
+
+        let mut parameters = Vec::new();
+        loop {
+            if let TokenType::Identifier(name) = &mut self.tokens[self.index].token_type {
+                parameters.push(std::mem::take(name));
+                self.index += 1; // Move past the identifier
+            } else if self.tokens[self.index].token_type == TokenType::RightParen {
+                self.index += 1; // Move past the right parenthesis
+                break;
+            } else {
+                return Err(LoxError::ParserError(
+                    "Error parsing function declaration".to_string(),
+                ));
+            }
+            if self.tokens[self.index].token_type == TokenType::Comma {
+                self.index += 1; // Consume the comma
+            }
+            if parameters.len() > MAX_NUM_ARGUMENTS {
+                return Err(LoxError::ParserError(format!(
+                    "Exceeded maximum number of parameters{}",
+                    MAX_NUM_ARGUMENTS
+                )));
+            }
+        }
+
+        let function_body = self.statement()?;
+
+        return Ok(Statement::FunctionDeclaration(
+            function_name,
+            parameters,
+            Box::new(function_body),
+        ));
+    }
+
+    // variable → IDENTIFIER ( "=" expression )? ";" ;
+    fn variable(&mut self) -> Result<Statement, LoxError> {
         // We expect an identifier after the "var keyword"
         let identifier_name;
         match &mut self.tokens[self.index].token_type {
@@ -372,7 +433,7 @@ impl Parser {
                 } else {
                     if self.tokens[self.index].token_type == TokenType::Var {
                         self.index += 1;
-                        let initializer_stmt = self.variable_declaration()?;
+                        let initializer_stmt = self.variable()?;
                         initializer = Some(initializer_stmt);
                     } else {
                         let initializer_expr = self.get_expression_for_statement()?;

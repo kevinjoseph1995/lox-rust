@@ -1,4 +1,3 @@
-
 {
     var a = "global a";
     var b = "global b";

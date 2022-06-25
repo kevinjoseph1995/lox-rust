@@ -47,6 +47,19 @@ fn handle_statement(statement: &Statement, level: usize) {
             println!("While {}", stringify(condition.as_ref()));
             handle_statement(statement.as_ref(), level + 2)
         }
+        Statement::FunctionDeclaration(function_name, parameters, body) => {
+            let mut string_to_print: String = "Function Declaration: ".to_string();
+            string_to_print = string_to_print + std::str::from_utf8(function_name).unwrap() + "(";
+            for param in parameters {
+                string_to_print = string_to_print + std::str::from_utf8(param).unwrap() + ","
+            }
+            string_to_print += "{";
+
+            println!("{}", string_to_print);
+            handle_statement(body, level + 2);
+            print!("{:<width$}", "", width = level);
+            println!("}}");
+        }
     }
 }
 

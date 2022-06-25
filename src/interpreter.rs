@@ -161,6 +161,9 @@ impl Interpreter {
                     condition_value = self.evaluate(condition_expr)?;
                 }
             }
+            Statement::FunctionDeclaration(_name, _parameters, _body) => {
+                todo!()
+            }
         }
         Ok(())
     }

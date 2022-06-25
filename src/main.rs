@@ -80,7 +80,7 @@ fn run_wrapper(line: &str, interpreter: &mut Interpreter) -> Result<(), LoxError
     let mut parser = Parser::new(tokens);
     let program = parser.parse()?;
 
-    // ast_printer::visualize_program_ast(&program); //  Uncomment me to visualize the AST
+    ast_printer::visualize_program_ast(&program); //  Uncomment me to visualize the AST
     interpreter.interpret(program)?;
 
     Ok(())
