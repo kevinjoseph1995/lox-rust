@@ -357,6 +357,9 @@ impl Interpreter {
                     }
                 }
             }
+            Expression::Call(_callee, _arguments) => {
+                todo!()
+            }
         }
     }
 }

@@ -53,7 +53,7 @@ fn handle_statement(statement: &Statement, level: usize) {
 fn stringify(expression: &Expression) -> String {
     match &expression {
         Expression::Literal(literal_type) => {
-            format!("({:?})", literal_type)
+            format!("{:?}", literal_type)
         }
         Expression::Unary(unary_operator, expression) => {
             format!("({:?} {:?})", unary_operator, stringify(&expression))
@@ -79,6 +79,13 @@ fn stringify(expression: &Expression) -> String {
         }
         Expression::Logical(lhs, op, rhs) => {
             format!("(Logical {} {:?} {})", stringify(&lhs), op, stringify(&rhs))
+        }
+        Expression::Call(callee, arguments) => {
+            let mut str = format!("Call expression {}(", stringify(&callee));
+            for expr in arguments {
+                str = str + &stringify(&expr) + ",";
+            }
+            str + ");"
         }
     }
 }

@@ -5,6 +5,8 @@ use crate::{
 use std::fmt::Debug;
 use std::str;
 
+const MAX_NUM_ARGUMENTS: usize = 64;
+
 pub struct Program {
     pub statements: Vec<Statement>,
 }
@@ -26,6 +28,7 @@ pub enum Statement {
     While(Box<Expression>, Box<Statement>),                      // Expr condition, Stmt body
 }
 
+#[derive(Clone)]
 pub enum Expression {
     Literal(LiteralType),
     Unary(UnaryOperator, Box<Expression>),
@@ -34,8 +37,10 @@ pub enum Expression {
     Grouping(Box<Expression>),
     Identifier(Vec<u8>),
     Assignment(Vec<u8>, Box<Expression>),
+    Call(Box<Expression>, Vec<Expression>), // Callee and list of arguments
 }
 
+#[derive(Clone)]
 pub enum UnaryOperator {
     Negate,
     Not,
@@ -50,6 +55,7 @@ impl Debug for UnaryOperator {
     }
 }
 
+#[derive(Clone)]
 pub enum BinaryOperator {
     Equal,
     NotEqual,
@@ -80,6 +86,7 @@ impl Debug for BinaryOperator {
     }
 }
 
+#[derive(Clone)]
 pub enum LogicalOperator {
     Or,
     And,
@@ -496,8 +503,9 @@ impl Parser {
         comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
         term           → factor ( ( "-" | "+" ) factor )* ;
         factor         → unary ( ( "/" | "*" ) unary )* ;
-        unary          → ( "!" | "-" ) unary
-                    | primary ;
+        unary          → ( "!" | "-" ) unary | call ;
+        call           → primary ( "(" arguments? ")" )* ;
+        arguments      → expression ( "," expression )* ;
         primary        → NUMBER | STRING | "true" | "false" | "nil"
                     | "(" expression ")" ;
     */
@@ -705,9 +713,7 @@ impl Parser {
         return Ok(expr);
     }
 
-    /*
-     * unary → ( "!" | "-" ) unary     | primary ;
-     */
+    // unary → ( "!" | "-" ) unary | call ;
     fn unary(&mut self) -> Result<Box<Expression>, LoxError> {
         match self.tokens[self.index].token_type {
             TokenType::Bang => {
@@ -723,8 +729,51 @@ impl Parser {
                     right_expr,
                 )))
             }
-            _ => self.primary(),
+            _ => self.call(),
         }
+    }
+
+    // call → primary ( "(" arguments? ")" )* ;
+    fn call(&mut self) -> Result<Box<Expression>, LoxError> {
+        let expr = self.primary()?;
+        if self.tokens[self.index].token_type == TokenType::LeftParen {
+            self.index += 1; // Move past the left parenthesis
+            let arguments = self.arguments()?;
+            return Ok(Box::new(Expression::Call(expr, arguments)));
+        }
+        return Ok(expr);
+    }
+
+    fn arguments(&mut self) -> Result<Vec<Expression>, LoxError> {
+        if self.tokens[self.index].token_type == TokenType::RightParen {
+            self.index += 1; // Move past the right parenthesis
+            return Ok(Vec::new());
+        }
+        // We have a hard-limit for the number of arguments for a "call"
+        let mut args: Vec<Expression> = Vec::new();
+        for _ in 0..MAX_NUM_ARGUMENTS + 1 {
+            let arg = self.expression()?;
+            args.push(arg.as_ref().clone());
+            if self.tokens[self.index].token_type == TokenType::Comma {
+                self.index += 1;
+                if self.tokens[self.index].token_type == TokenType::RightParen {
+                    // Allow trailing commas
+                    self.index += 1; // Move past the right paren
+                    return Ok(args);
+                }
+            } else if self.tokens[self.index].token_type == TokenType::RightParen {
+                self.index += 1; // Move past the right paren
+                return Ok(args);
+            } else {
+                return Err(LoxError::ParserError(format!(
+                    "Parsing arguments of function call line: {}",
+                    self.tokens[self.index].line_number
+                )));
+            }
+        }
+        return Err(LoxError::ParserError(format!(
+            "Reached maximum number of arguments that can be passed to a call expression"
+        )));
     }
 
     /*
