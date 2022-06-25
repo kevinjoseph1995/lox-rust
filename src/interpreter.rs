@@ -114,7 +114,7 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn handle_statement(&mut self, statement: &mut Statement) -> Result<(), LoxError> {
+    pub fn handle_statement(&mut self, statement: &Statement) -> Result<(), LoxError> {
         match statement {
             Statement::Expression(expression) => {
                 self.evaluate(expression)?;
@@ -147,17 +147,17 @@ impl Interpreter {
             Statement::If(condition, then_clause, else_clause) => {
                 let condition_value = self.evaluate(condition)?;
                 if is_true_value(&condition_value) {
-                    self.handle_statement(then_clause.as_mut())?;
+                    self.handle_statement(then_clause)?;
                 } else {
                     if let Some(else_clause) = else_clause {
-                        self.handle_statement(else_clause.as_mut())?;
+                        self.handle_statement(else_clause)?;
                     }
                 }
             }
             Statement::While(condition_expr, statement) => {
                 let mut condition_value = self.evaluate(condition_expr)?;
                 while is_true_value(&condition_value) {
-                    self.handle_statement(statement.as_mut())?;
+                    self.handle_statement(statement)?;
                     condition_value = self.evaluate(condition_expr)?;
                 }
             }
@@ -165,8 +165,8 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate(&mut self, expression: &mut Box<Expression>) -> Result<LiteralType, LoxError> {
-        match expression.as_mut() {
+    fn evaluate(&mut self, expression: &Expression) -> Result<LiteralType, LoxError> {
+        match expression {
             Expression::Literal(literal_type) => Ok(literal_type.clone()),
             Expression::Grouping(grouped_expression) => {
                 let value = self.evaluate(grouped_expression)?;
