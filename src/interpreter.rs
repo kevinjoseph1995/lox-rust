@@ -3,8 +3,101 @@ use crate::parser::{
     BinaryOperator, Expression, LiteralType, LogicalOperator, Program, Statement, UnaryOperator,
 };
 
+#[derive(Clone)]
+enum Object {
+    Number(f64),
+    String(Vec<u8>),
+    True,
+    False,
+    Nil,
+    Callable(Vec<Vec<u8>>, Box<Statement>, usize),
+}
+
+impl From<LiteralType> for Object {
+    fn from(literal: LiteralType) -> Self {
+        match literal {
+            LiteralType::Number(number) => Object::Number(number),
+            LiteralType::String(string) => Object::String(string),
+            LiteralType::True => Object::True,
+            LiteralType::False => Object::False,
+            LiteralType::Nil => Object::Nil,
+        }
+    }
+}
+
+impl From<bool> for Object {
+    fn from(v: bool) -> Object {
+        if v {
+            Object::True
+        } else {
+            Object::False
+        }
+    }
+}
+
+impl PartialEq for Object {
+    fn eq(&self, other: &Self) -> bool {
+        if let (Object::Number(value1), Object::Number(value2)) = (&self, &other) {
+            return value1 == value2;
+        }
+        if let (Object::String(value1), Object::String(value2)) = (&self, &other) {
+            return value1 == value2;
+        }
+        return self == other;
+    }
+}
+
+impl std::fmt::Display for Object {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Object::Number(number) => {
+                write!(f, "{}", number)
+            }
+            Object::String(u8_vec) => {
+                let result = std::str::from_utf8(u8_vec);
+
+                match result {
+                    Ok(str_val) => write!(f, "{}", str_val),
+                    Err(_) => write!(f, "UTF decoding error"),
+                }
+            }
+            Object::True => {
+                write!(f, "True")
+            }
+            Object::False => {
+                write!(f, "False")
+            }
+            Object::Nil => {
+                write!(f, "Nil")
+            }
+            Object::Callable(_, _, _) => {
+                write!(f, "Callable object") // TODO expand a little bit more
+            }
+        }
+    }
+}
+
+fn is_true_value(value: &Object) -> bool {
+    match value {
+        Object::True => true,
+        Object::Number(num) => {
+            if num.clone() != 0.0f64 {
+                return true;
+            }
+            false
+        }
+        Object::String(_) => true,
+        _ => false,
+    }
+}
+
+struct NamedObject {
+    name: Vec<u8>,
+    object: Object,
+}
+
 struct Environment {
-    variables: Vec<(Vec<u8>, LiteralType)>,
+    variables: Vec<NamedObject>,
 }
 
 impl Environment {
@@ -27,35 +120,38 @@ impl Environment {
         return true;
     }
 
-    fn lookup_global(&self, name: &Vec<u8>) -> Option<&LiteralType> {
+    fn lookup_global(&self, name: &Vec<u8>) -> Option<&Object> {
         if let Some(name_value_pair) = self
             .variables
             .iter()
-            .find(|x| Self::name_comp(&(*x).0, name))
+            .find(|x| Self::name_comp(&(*x).name, name))
         {
-            return Some(&name_value_pair.1);
+            return Some(&name_value_pair.object);
         }
         return None;
     }
 
-    fn update_or_add(&mut self, name: &Vec<u8>, value: LiteralType) {
+    fn update_or_add(&mut self, name: &Vec<u8>, value: Object) {
         if let Some(name_value_pair) = self
             .variables
             .iter_mut()
-            .find(|x| Self::name_comp(&(*x).0, &name))
+            .find(|x| Self::name_comp(&(*x).name, &name))
         {
-            name_value_pair.1 = value
+            name_value_pair.object = value
         } else {
-            self.variables.push((name.clone(), value));
+            self.variables.push(NamedObject {
+                name: name.clone(),
+                object: value,
+            });
         }
     }
-    fn update(&mut self, name: &Vec<u8>, value: &LiteralType) -> bool {
+    fn update(&mut self, name: &Vec<u8>, value: &Object) -> bool {
         if let Some(name_value_pair) = self
             .variables
             .iter_mut()
-            .find(|x| Self::name_comp(&(*x).0, &name))
+            .find(|x| Self::name_comp(&(*x).name, &name))
         {
-            name_value_pair.1 = value.clone();
+            name_value_pair.object = value.clone();
             return true;
         } else {
             return false;
@@ -63,43 +159,31 @@ impl Environment {
     }
 }
 
-fn is_true_value(value: &LiteralType) -> bool {
-    match value {
-        LiteralType::True => true,
-        LiteralType::Number(num) => {
-            if num.clone() != 0.0f64 {
-                return true;
-            }
-            false
-        }
-        LiteralType::String(_) => true,
-        _ => false,
-    }
-}
-
 pub struct Interpreter {
     environment_stack: Vec<Environment>,
+    current_environment_index: usize,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
             environment_stack: vec![Environment::new()], // Push the global environment onto the stack
+            current_environment_index: 0, // Moke the current environment point to the global environment
         }
     }
 
-    pub fn lookup_variable(&self, name: &Vec<u8>) -> Option<&LiteralType> {
-        for env in self.environment_stack.iter().rev() {
-            if let Some(value) = env.lookup_global(name) {
+    fn lookup_variable(&self, name: &Vec<u8>) -> Option<&Object> {
+        for index in (0..=self.current_environment_index).rev() {
+            if let Some(value) = self.environment_stack[index].lookup_global(name) {
                 return Some(value);
             }
         }
         None
     }
 
-    fn update(&mut self, name: &Vec<u8>, value: LiteralType) -> bool {
-        for env in self.environment_stack.iter_mut().rev() {
-            if env.update(name, &value) {
+    fn update(&mut self, name: &Vec<u8>, value: Object) -> bool {
+        for index in (0..=self.current_environment_index).rev() {
+            if self.environment_stack[index].update(name, &value) {
                 return true;
             }
         }
@@ -139,10 +223,12 @@ impl Interpreter {
             Statement::Block(block_statements) => {
                 // Entered new scope
                 self.environment_stack.push(Environment::new());
+                self.current_environment_index = self.environment_stack.len() - 1;
                 for statement in block_statements {
                     self.handle_statement(statement)?;
                 }
                 self.environment_stack.pop();
+                self.current_environment_index = self.environment_stack.len() - 1;
             }
             Statement::If(condition, then_clause, else_clause) => {
                 let condition_value = self.evaluate(condition)?;
@@ -161,16 +247,16 @@ impl Interpreter {
                     condition_value = self.evaluate(condition_expr)?;
                 }
             }
-            Statement::FunctionDeclaration(_name, _parameters, _body) => {
-                todo!()
+            Statement::FunctionDeclaration(_name, parameters, _body) => {
+                todo!();
             }
         }
         Ok(())
     }
 
-    fn evaluate(&mut self, expression: &Expression) -> Result<LiteralType, LoxError> {
+    fn evaluate(&mut self, expression: &Expression) -> Result<Object, LoxError> {
         match expression {
-            Expression::Literal(literal_type) => Ok(literal_type.clone()),
+            Expression::Literal(literal_type) => Ok(Object::from(literal_type.clone())),
             Expression::Grouping(grouped_expression) => {
                 let value = self.evaluate(grouped_expression)?;
                 Ok(value)
@@ -179,22 +265,28 @@ impl Interpreter {
                 let value = self.evaluate(unary_operator_expression)?;
                 match unary_operator {
                     UnaryOperator::Negate => match value {
-                        LiteralType::String(_) => {
+                        Object::String(_) => {
                             return Err(LoxError::RuntimeError(
                                 "Invalid runtime type for negation operation".to_string(),
                             ));
                         }
-                        LiteralType::Number(number) => Ok(LiteralType::Number(-number)),
-                        LiteralType::True => Ok(LiteralType::Number(-1.0f64)), // Implicit cast to number
-                        LiteralType::False => Ok(LiteralType::Number(0.0f64)), // Implicit cast to number
-                        LiteralType::Nil => Ok(LiteralType::Nil),
+                        Object::Number(number) => Ok(Object::Number(-number)),
+                        Object::True => Ok(Object::Number(-1.0f64)), // Implicit cast to number
+                        Object::False => Ok(Object::Number(0.0f64)), // Implicit cast to number
+                        Object::Nil => Ok(Object::Nil),
+                        Object::Callable(_, _, _) => Err(LoxError::RuntimeError(
+                            "Cannot negate callable object".to_string(),
+                        )),
                     },
                     UnaryOperator::Not => match value {
-                        LiteralType::String(_) => Ok(LiteralType::False),
-                        LiteralType::Number(_) => Ok(LiteralType::False),
-                        LiteralType::True => Ok(LiteralType::False),
-                        LiteralType::False => Ok(LiteralType::True),
-                        LiteralType::Nil => Ok(LiteralType::True),
+                        Object::String(_) => Ok(Object::False),
+                        Object::Number(_) => Ok(Object::False),
+                        Object::True => Ok(Object::False),
+                        Object::False => Ok(Object::True),
+                        Object::Nil => Ok(Object::True),
+                        Object::Callable(_, _, _) => Err(LoxError::RuntimeError(
+                            "Cannot call logical not on callable object".to_string(),
+                        )),
                     },
                 }
             }
@@ -202,17 +294,17 @@ impl Interpreter {
                 let left_value = self.evaluate(lhs_expression)?;
                 let right_value = self.evaluate(rhs_expression)?;
                 match binary_operator {
-                    BinaryOperator::Equal => Ok(LiteralType::from(left_value == right_value)),
-                    BinaryOperator::NotEqual => Ok(LiteralType::from(left_value != right_value)),
+                    BinaryOperator::Equal => Ok(Object::from(left_value == right_value)),
+                    BinaryOperator::NotEqual => Ok(Object::from(left_value != right_value)),
                     BinaryOperator::Plus => match (left_value, right_value) {
-                        (LiteralType::String(str1), LiteralType::String(str2)) => {
+                        (Object::String(str1), Object::String(str2)) => {
                             let mut v3 = Vec::new();
                             v3.extend_from_slice(&str1[..]);
                             v3.extend_from_slice(&str2[..]);
-                            Ok(LiteralType::String(v3))
+                            Ok(Object::String(v3))
                         }
-                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
-                            Ok(LiteralType::Number(num1 + num2))
+                        (Object::Number(num1), Object::Number(num2)) => {
+                            Ok(Object::Number(num1 + num2))
                         }
                         _ => {
                             return Err(LoxError::RuntimeError(
@@ -224,11 +316,11 @@ impl Interpreter {
                     },
                     // Only for number, true and false type
                     BinaryOperator::LessThan => match (left_value, right_value) {
-                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
+                        (Object::Number(num1), Object::Number(num2)) => {
                             if num1 < num2 {
-                                Ok(LiteralType::True)
+                                Ok(Object::True)
                             } else {
-                                Ok(LiteralType::False)
+                                Ok(Object::False)
                             }
                         }
                         _ => {
@@ -238,11 +330,11 @@ impl Interpreter {
                         }
                     },
                     BinaryOperator::LessThanEqual => match (left_value, right_value) {
-                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
+                        (Object::Number(num1), Object::Number(num2)) => {
                             if num1 <= num2 {
-                                Ok(LiteralType::True)
+                                Ok(Object::True)
                             } else {
-                                Ok(LiteralType::False)
+                                Ok(Object::False)
                             }
                         }
                         _ => {
@@ -253,11 +345,11 @@ impl Interpreter {
                     },
 
                     BinaryOperator::GreaterThan => match (left_value, right_value) {
-                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
+                        (Object::Number(num1), Object::Number(num2)) => {
                             if num1 > num2 {
-                                Ok(LiteralType::True)
+                                Ok(Object::True)
                             } else {
-                                Ok(LiteralType::False)
+                                Ok(Object::False)
                             }
                         }
                         _ => {
@@ -268,11 +360,11 @@ impl Interpreter {
                     },
 
                     BinaryOperator::GreaterThanEqual => match (left_value, right_value) {
-                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
+                        (Object::Number(num1), Object::Number(num2)) => {
                             if num1 >= num2 {
-                                Ok(LiteralType::True)
+                                Ok(Object::True)
                             } else {
-                                Ok(LiteralType::False)
+                                Ok(Object::False)
                             }
                         }
                         _ => {
@@ -283,8 +375,8 @@ impl Interpreter {
                     },
 
                     BinaryOperator::Minus => match (left_value, right_value) {
-                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
-                            Ok(LiteralType::Number(num1 - num2))
+                        (Object::Number(num1), Object::Number(num2)) => {
+                            Ok(Object::Number(num1 - num2))
                         }
                         _ => {
                             return Err(LoxError::RuntimeError(
@@ -293,8 +385,8 @@ impl Interpreter {
                         }
                     },
                     BinaryOperator::Multiply => match (left_value, right_value) {
-                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
-                            Ok(LiteralType::Number(num1 * num2))
+                        (Object::Number(num1), Object::Number(num2)) => {
+                            Ok(Object::Number(num1 * num2))
                         }
                         _ => {
                             return Err(LoxError::RuntimeError(
@@ -303,8 +395,8 @@ impl Interpreter {
                         }
                     },
                     BinaryOperator::Divide => match (left_value, right_value) {
-                        (LiteralType::Number(num1), LiteralType::Number(num2)) => {
-                            Ok(LiteralType::Number(num1 / num2))
+                        (Object::Number(num1), Object::Number(num2)) => {
+                            Ok(Object::Number(num1 / num2))
                         }
                         _ => {
                             return Err(LoxError::RuntimeError(
@@ -328,7 +420,7 @@ impl Interpreter {
             Expression::Assignment(name, expr) => {
                 let new_value = self.evaluate(expr)?;
                 if self.update(name, new_value) {
-                    return Ok(LiteralType::Nil);
+                    return Ok(Object::Nil);
                 } else {
                     return Err(LoxError::RuntimeError(format!(
                         "Reference to undeclared variable"
@@ -340,23 +432,23 @@ impl Interpreter {
                 match op {
                     LogicalOperator::And => {
                         if !is_true_value(&lhs_value) {
-                            return Ok(LiteralType::False);
+                            return Ok(Object::False);
                         }
                         let rhs_value = self.evaluate(rhs)?;
                         if is_true_value(&rhs_value) {
-                            return Ok(LiteralType::True);
+                            return Ok(Object::True);
                         }
-                        return Ok(LiteralType::False);
+                        return Ok(Object::False);
                     }
                     LogicalOperator::Or => {
                         if is_true_value(&lhs_value) {
-                            return Ok(LiteralType::True);
+                            return Ok(Object::True);
                         }
                         let rhs_value = self.evaluate(rhs)?;
                         if is_true_value(&rhs_value) {
-                            return Ok(LiteralType::True);
+                            return Ok(Object::True);
                         }
-                        return Ok(LiteralType::False);
+                        return Ok(Object::False);
                     }
                 }
             }

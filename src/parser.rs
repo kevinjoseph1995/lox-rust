@@ -19,6 +19,7 @@ impl Program {
     }
 }
 
+#[derive(Clone)]
 pub enum Statement {
     Expression(Box<Expression>),
     Print(Box<Expression>),
@@ -132,55 +133,6 @@ impl Debug for LiteralType {
             Self::True => write!(f, "True"),
             Self::False => write!(f, "False"),
             Self::Nil => write!(f, "Nil"),
-        }
-    }
-}
-
-impl PartialEq for LiteralType {
-    fn eq(&self, other: &Self) -> bool {
-        if let (LiteralType::Number(value1), LiteralType::Number(value2)) = (&self, &other) {
-            return value1 == value2;
-        }
-        if let (LiteralType::String(value1), LiteralType::String(value2)) = (&self, &other) {
-            return value1 == value2;
-        }
-        return self == other;
-    }
-}
-
-impl From<bool> for LiteralType {
-    fn from(v: bool) -> LiteralType {
-        if v {
-            LiteralType::True
-        } else {
-            LiteralType::False
-        }
-    }
-}
-
-impl std::fmt::Display for LiteralType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LiteralType::Number(number) => {
-                write!(f, "{}", number)
-            }
-            LiteralType::String(u8_vec) => {
-                let result = std::str::from_utf8(u8_vec);
-
-                match result {
-                    Ok(str_val) => write!(f, "{}", str_val),
-                    Err(_) => write!(f, "UTF decoding error"),
-                }
-            }
-            LiteralType::True => {
-                write!(f, "True")
-            }
-            LiteralType::False => {
-                write!(f, "False")
-            }
-            LiteralType::Nil => {
-                write!(f, "Nil")
-            }
         }
     }
 }

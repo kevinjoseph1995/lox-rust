@@ -1,12 +1,24 @@
 fun my_function() {
-    print "Hello world";
+    print a;    
 }
 
 
-fun my_function2() {
-    my_function();
-    fun my_nested_function() {
-        print "Calling from nested function";
+{
+    {
+        var a = 10;
         my_function();
     }
 }
+
+// 
+// 
+// 
+// 
+// 
+// 
+// 
+// 
+// Block 2 -> a
+// Block 1 -> 
+// Global  -> my_function
+//
