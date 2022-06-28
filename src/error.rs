@@ -6,7 +6,6 @@ pub enum LoxError {
     LexErr,
     ParserError(String),
     RuntimeError(String),
-    InternalError(String),
 }
 
 impl Display for LoxError {
@@ -22,9 +21,6 @@ impl Display for LoxError {
                 write!(f, "{}", err)
             }
             LoxError::RuntimeError(err) => {
-                write!(f, "{}", err)
-            }
-            LoxError::InternalError(err) => {
                 write!(f, "{}", err)
             }
         }

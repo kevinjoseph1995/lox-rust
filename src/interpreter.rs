@@ -1,38 +1,20 @@
-use crate::environment_manager::{is_true_value, Environment, Object};
+use crate::environment_manager::{is_true_value, EnvironmentManager, NodeID, Object};
 use crate::error::LoxError;
 use crate::parser::{
-    BinaryOperator, Expression, LiteralType, LogicalOperator, Program, Statement, UnaryOperator,
+    BinaryOperator, Expression, LogicalOperator, Program, Statement, UnaryOperator,
 };
 
 pub struct Interpreter {
-    environment_stack: Vec<Environment>,
-    current_environment_index: usize,
+    environment_manager: EnvironmentManager,
+    current_environment_id: NodeID,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
-            environment_stack: vec![Environment::new()], // Push the global environment onto the stack
-            current_environment_index: 0, // Moke the current environment point to the global environment
+            environment_manager: EnvironmentManager::new(),
+            current_environment_id: 0,
         }
-    }
-
-    fn lookup_variable(&self, name: &Vec<u8>) -> Option<&Object> {
-        for index in (0..=self.current_environment_index).rev() {
-            if let Some(value) = self.environment_stack[index].lookup_global(name) {
-                return Some(value);
-            }
-        }
-        None
-    }
-
-    fn update(&mut self, name: &Vec<u8>, value: Object) -> bool {
-        for index in (0..=self.current_environment_index).rev() {
-            if self.environment_stack[index].update(name, &value) {
-                return true;
-            }
-        }
-        return false;
     }
 
     pub fn interpret(&mut self, program: Program) -> Result<(), LoxError> {
@@ -54,26 +36,21 @@ impl Interpreter {
             }
             Statement::VariableDeclaration(name, expression) => {
                 let value = self.evaluate(expression)?;
-                match self.environment_stack.last_mut() {
-                    Some(environment) => {
-                        environment.update_or_add(name, value);
-                    }
-                    None => {
-                        return Err(LoxError::InternalError(
-                            "Empty environment stack, something really bad happened".to_string(),
-                        ))
-                    }
-                }
+                self.environment_manager
+                    .update_or_add(name, value, self.current_environment_id);
             }
             Statement::Block(block_statements) => {
                 // Entered new scope
-                self.environment_stack.push(Environment::new());
-                self.current_environment_index = self.environment_stack.len() - 1;
+                let parent_id = self.current_environment_id;
+                self.current_environment_id = self
+                    .environment_manager
+                    .create_child(self.current_environment_id);
                 for statement in block_statements {
                     self.handle_statement(statement)?;
                 }
-                self.environment_stack.pop();
-                self.current_environment_index = self.environment_stack.len() - 1;
+                self.environment_manager
+                    .delete_node(self.current_environment_id);
+                self.current_environment_id = parent_id;
             }
             Statement::If(condition, then_clause, else_clause) => {
                 let condition_value = self.evaluate(condition)?;
@@ -252,7 +229,10 @@ impl Interpreter {
                 }
             }
             Expression::Identifier(name) => {
-                if let Some(value) = self.lookup_variable(&name) {
+                if let Some(value) = self
+                    .environment_manager
+                    .lookup_global(self.current_environment_id, &name)
+                {
                     return Ok(value.clone()); // Find a better way to do lookup without copying
                 } else {
                     let name_str = std::str::from_utf8(&name).unwrap();
@@ -264,7 +244,10 @@ impl Interpreter {
             }
             Expression::Assignment(name, expr) => {
                 let new_value = self.evaluate(expr)?;
-                if self.update(name, new_value) {
+                if self
+                    .environment_manager
+                    .update(&name, &new_value, self.current_environment_id)
+                {
                     return Ok(Object::Nil);
                 } else {
                     return Err(LoxError::RuntimeError(format!(
