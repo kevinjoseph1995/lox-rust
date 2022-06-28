@@ -4,6 +4,7 @@ use std::{
 };
 
 mod ast_printer;
+mod environment_manager;
 mod error;
 mod interpreter;
 mod parser;
