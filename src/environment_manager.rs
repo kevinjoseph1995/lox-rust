@@ -143,17 +143,22 @@ impl Environment {
         }
     }
 }
-
+#[derive(PartialEq)]
+enum NodeStatus {
+    Valid,
+    ToBeDeleted,
+}
 pub type NodeID = usize;
 struct EnvironmentNode {
     environment: Environment,
-    id: Option<NodeID>,
+    status: NodeStatus,
     parent_id: Option<NodeID>,
     children: Vec<NodeID>,
 }
 
 pub struct EnvironmentManager {
     environment_arena: Vec<EnvironmentNode>,
+    environment_stack: Vec<NodeID>,
 }
 
 impl EnvironmentManager {
@@ -161,32 +166,21 @@ impl EnvironmentManager {
         EnvironmentManager {
             environment_arena: vec![EnvironmentNode {
                 environment: Environment::new(),
-                id: Some(0 as NodeID),
+                status: NodeStatus::Valid,
                 parent_id: None,
                 children: Vec::new(),
             }],
+            environment_stack: vec![0],
         }
     }
 
-    pub fn size(&self) -> usize {
-        return self.size();
+    pub fn push_context(&mut self) {
+        let child_id = self.create_child(self.environment_stack.last().unwrap().clone());
+        self.environment_stack.push(child_id);
     }
 
-    pub fn create_child(&mut self, id: NodeID) -> NodeID {
-        let child_id = self.environment_arena.len();
-        self.environment_arena[id].children.push(child_id);
-        self.environment_arena.push(EnvironmentNode {
-            environment: Environment::new(),
-            id: Some(child_id),
-            parent_id: Some(id),
-            children: Vec::new(),
-        });
-
-        return self.environment_arena.len() - 1;
-    }
-
-    pub fn delete_node(&mut self, id: NodeID) {
-        if self.environment_arena[id].id.is_none() {
+    fn mark_for_deletion(&mut self, id: NodeID) {
+        if self.environment_arena[id].status == NodeStatus::ToBeDeleted {
             return;
         }
         let mut children_to_delete = Vec::new();
@@ -196,16 +190,41 @@ impl EnvironmentManager {
             }
         }
         for to_delete in children_to_delete {
-            self.delete_node(to_delete);
+            self.mark_for_deletion(to_delete);
         }
-        self.environment_arena[id].id = None;
+        self.environment_arena[id].status = NodeStatus::ToBeDeleted;
     }
 
-    pub fn lookup_global(&mut self, from_id: NodeID, name: &Vec<u8>) -> Option<&Object> {
-        if self.environment_arena[from_id].id.is_none() {
+    pub fn pop_context(&mut self) {
+        assert!(
+            self.environment_stack.len() > 1,
+            "Global environment should never be popped out"
+        );
+        if let Some(child_id) = self.environment_stack.pop() {
+            self.mark_for_deletion(child_id);
+        } else {
+            panic!("Unmatched pop_context called");
+        }
+    }
+
+    fn create_child(&mut self, id: NodeID) -> NodeID {
+        let child_id = self.environment_arena.len();
+        self.environment_arena[id].children.push(child_id);
+        self.environment_arena.push(EnvironmentNode {
+            environment: Environment::new(),
+            status: NodeStatus::Valid,
+            parent_id: Some(id),
+            children: Vec::new(),
+        });
+
+        return self.environment_arena.len() - 1;
+    }
+
+    pub fn lookup(&mut self, name: &Vec<u8>) -> Option<&Object> {
+        let mut current_id = self.environment_stack.last().unwrap().clone();
+        if self.environment_arena[current_id].status == NodeStatus::ToBeDeleted {
             return None;
         }
-        let mut current_id = from_id;
 
         loop {
             if let Some(value) = self.environment_arena[current_id].environment.lookup(name) {
@@ -220,15 +239,16 @@ impl EnvironmentManager {
         }
         None
     }
-    pub fn update_or_add(&mut self, name: &Vec<u8>, value: Object, id: NodeID) {
-        assert!(self.environment_arena[id].id.is_some());
+    pub fn update_or_add(&mut self, name: &Vec<u8>, value: Object) {
+        let id = self.environment_stack.last().unwrap().clone();
         self.environment_arena[id]
             .environment
             .update_or_add(name, value)
     }
 
-    pub fn update(&mut self, name: &Vec<u8>, value: &Object, id: NodeID) -> bool {
-        assert!(self.environment_arena[id].id.is_some());
+    pub fn update(&mut self, name: &Vec<u8>, value: &Object) -> bool {
+        let id = self.environment_stack.last().unwrap().clone();
+        assert!(self.environment_arena[id].status == NodeStatus::Valid);
 
         let mut current_id = id;
         loop {

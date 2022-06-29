@@ -6,14 +6,12 @@ use crate::parser::{
 
 pub struct Interpreter {
     environment_manager: EnvironmentManager,
-    current_environment_id: NodeID,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
             environment_manager: EnvironmentManager::new(),
-            current_environment_id: 0,
         }
     }
 
@@ -36,21 +34,15 @@ impl Interpreter {
             }
             Statement::VariableDeclaration(name, expression) => {
                 let value = self.evaluate(expression)?;
-                self.environment_manager
-                    .update_or_add(name, value, self.current_environment_id);
+                self.environment_manager.update_or_add(name, value);
             }
             Statement::Block(block_statements) => {
                 // Entered new scope
-                let parent_id = self.current_environment_id;
-                self.current_environment_id = self
-                    .environment_manager
-                    .create_child(self.current_environment_id);
+                self.environment_manager.push_context();
                 for statement in block_statements {
                     self.handle_statement(statement)?;
                 }
-                self.environment_manager
-                    .delete_node(self.current_environment_id);
-                self.current_environment_id = parent_id;
+                self.environment_manager.pop_context();
             }
             Statement::If(condition, then_clause, else_clause) => {
                 let condition_value = self.evaluate(condition)?;
@@ -229,10 +221,7 @@ impl Interpreter {
                 }
             }
             Expression::Identifier(name) => {
-                if let Some(value) = self
-                    .environment_manager
-                    .lookup_global(self.current_environment_id, &name)
-                {
+                if let Some(value) = self.environment_manager.lookup(&name) {
                     return Ok(value.clone()); // Find a better way to do lookup without copying
                 } else {
                     let name_str = std::str::from_utf8(&name).unwrap();
@@ -244,10 +233,7 @@ impl Interpreter {
             }
             Expression::Assignment(name, expr) => {
                 let new_value = self.evaluate(expr)?;
-                if self
-                    .environment_manager
-                    .update(&name, &new_value, self.current_environment_id)
-                {
+                if self.environment_manager.update(&name, &new_value) {
                     return Ok(Object::Nil);
                 } else {
                     return Err(LoxError::RuntimeError(format!(
