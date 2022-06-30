@@ -4,6 +4,7 @@ WIP:
 
 
 ```
+print "Scope and block statements";
 {
     var a = "global a";
     var b = "global b";
@@ -25,9 +26,6 @@ WIP:
     print b;
     print c;
 }
-
-print "************************************";
-
 {
     var a = 10;
     {
@@ -57,22 +55,21 @@ print "************************************";
     var b = 10;
     print b;
 }
-print "************************************";
 
+print "While loops";
 {
-    var i = 10;
-    while(i >= 0) {
-        i = i -1;
+    var i = 10;    
+    while(i >= 0) {        
         print i;
+        i = i -1;        
     }
 }
 
-print "************************************";
+print "For Loops";
 {
     var i = 0;
     for(i = 0; i < 10; i = i + 1) {
         print i;
     }
     
-}
-```
+}```

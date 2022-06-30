@@ -7,7 +7,7 @@ pub enum Object {
     True,
     False,
     Nil,
-    Callable(Vec<Vec<u8>>, Box<Statement>, usize),
+    Callable(Vec<Vec<u8>>, Box<Statement>),
 }
 
 impl From<LiteralType> for Object {
@@ -67,7 +67,7 @@ impl std::fmt::Display for Object {
             Object::Nil => {
                 write!(f, "Nil")
             }
-            Object::Callable(_, _, _) => {
+            Object::Callable(_, _) => {
                 write!(f, "Callable object") // TODO expand a little bit more
             }
         }
@@ -143,15 +143,10 @@ impl Environment {
         }
     }
 }
-#[derive(PartialEq)]
-enum NodeStatus {
-    Valid,
-    ToBeDeleted,
-}
+
 pub type NodeID = usize;
 struct EnvironmentNode {
     environment: Environment,
-    status: NodeStatus,
     parent_id: Option<NodeID>,
     children: Vec<NodeID>,
 }
@@ -166,7 +161,6 @@ impl EnvironmentManager {
         EnvironmentManager {
             environment_arena: vec![EnvironmentNode {
                 environment: Environment::new(),
-                status: NodeStatus::Valid,
                 parent_id: None,
                 children: Vec::new(),
             }],
@@ -179,32 +173,12 @@ impl EnvironmentManager {
         self.environment_stack.push(child_id);
     }
 
-    fn mark_for_deletion(&mut self, id: NodeID) {
-        if self.environment_arena[id].status == NodeStatus::ToBeDeleted {
-            return;
-        }
-        let mut children_to_delete = Vec::new();
-        {
-            for child_id in &self.environment_arena[id].children {
-                children_to_delete.push(child_id.clone());
-            }
-        }
-        for to_delete in children_to_delete {
-            self.mark_for_deletion(to_delete);
-        }
-        self.environment_arena[id].status = NodeStatus::ToBeDeleted;
-    }
-
     pub fn pop_context(&mut self) {
         assert!(
             self.environment_stack.len() > 1,
             "Global environment should never be popped out"
         );
-        if let Some(child_id) = self.environment_stack.pop() {
-            self.mark_for_deletion(child_id);
-        } else {
-            panic!("Unmatched pop_context called");
-        }
+        self.environment_stack.pop();
     }
 
     fn create_child(&mut self, id: NodeID) -> NodeID {
@@ -212,7 +186,6 @@ impl EnvironmentManager {
         self.environment_arena[id].children.push(child_id);
         self.environment_arena.push(EnvironmentNode {
             environment: Environment::new(),
-            status: NodeStatus::Valid,
             parent_id: Some(id),
             children: Vec::new(),
         });
@@ -222,9 +195,6 @@ impl EnvironmentManager {
 
     pub fn lookup(&mut self, name: &Vec<u8>) -> Option<&Object> {
         let mut current_id = self.environment_stack.last().unwrap().clone();
-        if self.environment_arena[current_id].status == NodeStatus::ToBeDeleted {
-            return None;
-        }
 
         loop {
             if let Some(value) = self.environment_arena[current_id].environment.lookup(name) {
@@ -248,7 +218,6 @@ impl EnvironmentManager {
 
     pub fn update(&mut self, name: &Vec<u8>, value: &Object) -> bool {
         let id = self.environment_stack.last().unwrap().clone();
-        assert!(self.environment_arena[id].status == NodeStatus::Valid);
 
         let mut current_id = id;
         loop {

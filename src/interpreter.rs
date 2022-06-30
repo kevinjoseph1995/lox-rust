@@ -1,4 +1,5 @@
-use crate::environment_manager::{is_true_value, EnvironmentManager, NodeID, Object};
+use crate::environment_manager::{is_true_value, EnvironmentManager, Object};
+
 use crate::error::LoxError;
 use crate::parser::{
     BinaryOperator, Expression, LogicalOperator, Program, Statement, UnaryOperator,
@@ -61,7 +62,7 @@ impl Interpreter {
                     condition_value = self.evaluate(condition_expr)?;
                 }
             }
-            Statement::FunctionDeclaration(_name, parameters, _body) => {
+            Statement::FunctionDeclaration(_name, _parameters, _body) => {
                 todo!();
             }
         }
@@ -88,7 +89,7 @@ impl Interpreter {
                         Object::True => Ok(Object::Number(-1.0f64)), // Implicit cast to number
                         Object::False => Ok(Object::Number(0.0f64)), // Implicit cast to number
                         Object::Nil => Ok(Object::Nil),
-                        Object::Callable(_, _, _) => Err(LoxError::RuntimeError(
+                        Object::Callable(_, _) => Err(LoxError::RuntimeError(
                             "Cannot negate callable object".to_string(),
                         )),
                     },
@@ -98,7 +99,7 @@ impl Interpreter {
                         Object::True => Ok(Object::False),
                         Object::False => Ok(Object::True),
                         Object::Nil => Ok(Object::True),
-                        Object::Callable(_, _, _) => Err(LoxError::RuntimeError(
+                        Object::Callable(_, _) => Err(LoxError::RuntimeError(
                             "Cannot call logical not on callable object".to_string(),
                         )),
                     },
