@@ -65,6 +65,7 @@ impl Interpreter {
             Statement::FunctionDeclaration(_name, _parameters, _body) => {
                 todo!();
             }
+            Statement::Return(_) => todo!(),
         }
         Ok(())
     }
@@ -89,7 +90,7 @@ impl Interpreter {
                         Object::True => Ok(Object::Number(-1.0f64)), // Implicit cast to number
                         Object::False => Ok(Object::Number(0.0f64)), // Implicit cast to number
                         Object::Nil => Ok(Object::Nil),
-                        Object::Callable(_, _) => Err(LoxError::RuntimeError(
+                        Object::Callable(_) => Err(LoxError::RuntimeError(
                             "Cannot negate callable object".to_string(),
                         )),
                     },
@@ -99,7 +100,7 @@ impl Interpreter {
                         Object::True => Ok(Object::False),
                         Object::False => Ok(Object::True),
                         Object::Nil => Ok(Object::True),
-                        Object::Callable(_, _) => Err(LoxError::RuntimeError(
+                        Object::Callable(_) => Err(LoxError::RuntimeError(
                             "Cannot call logical not on callable object".to_string(),
                         )),
                     },

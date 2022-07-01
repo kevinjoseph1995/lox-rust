@@ -60,6 +60,10 @@ fn handle_statement(statement: &Statement, level: usize) {
             print!("{:<width$}", "", width = level);
             println!("}}");
         }
+        Statement::Return(optional_expr) => match optional_expr {
+            Some(expr) => println!("Return statement: {}", stringify(expr)),
+            None => println!("Return statement"),
+        },
     }
 }
 

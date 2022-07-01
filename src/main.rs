@@ -77,12 +77,12 @@ fn run(line: &str, interpreter: &mut Interpreter) {
 fn run_wrapper(line: &str, interpreter: &mut Interpreter) -> Result<(), LoxError> {
     // Scan
     let tokens = scan_tokens(&(line.as_bytes()))?;
-    println!("{:#?}", tokens);
+    // println!("{:#?}", tokens);
     let mut parser = Parser::new(tokens);
     let program = parser.parse()?;
 
     ast_printer::visualize_program_ast(&program); //  Uncomment me to visualize the AST
-    interpreter.interpret(program)?;
+                                                  // interpreter.interpret(program)?;
 
     Ok(())
 }

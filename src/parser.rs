@@ -28,6 +28,7 @@ pub enum Statement {
     Block(Vec<Statement>),
     If(Box<Expression>, Box<Statement>, Option<Box<Statement>>), // (Condition, Then-clause, Else-clause)
     While(Box<Expression>, Box<Statement>),                      // Expr condition, Stmt body
+    Return(Option<Box<Expression>>),
 }
 
 #[derive(Clone)]
@@ -166,7 +167,7 @@ impl Parser {
     /*
         program        → declaration* EOF ;
         declaration    → funDecl | varDecl |  statement ;
-        statement      → exprStmt | printStmt | blockStmt | ifStmt;
+        statement      → exprStmt | printStmt | blockStmt | ifStmt | returnStmt;
     */
     fn program(&mut self) -> Result<Program, LoxError> {
         let mut program = Program::new();
@@ -416,7 +417,6 @@ impl Parser {
                 }
                 // Main body
                 let body = self.statement()?;
-
                 // Compose everything now
                 let mut outer_block_statements: Vec<Statement> = Vec::new();
                 if let Some(initializer_stmt) = initializer {
@@ -457,6 +457,24 @@ impl Parser {
                 let statement = self.statement()?;
 
                 return Ok(Statement::While(condition, Box::new(statement)));
+            }
+            TokenType::Return => {
+                // returnStmt  → "return"  expression? ;
+                self.index += 1; // move past the return token
+                let expr;
+                if self.tokens[self.index].token_type == TokenType::Semicolon {
+                    expr = None;
+                } else {
+                    let e = self.expression()?;
+                    expr = Some(e);
+                }
+                if self.tokens[self.index].token_type != TokenType::Semicolon {
+                    return Err(LoxError::ParserError(
+                        "Expected semicolon at the end of return statement".to_string(),
+                    ));
+                }
+                self.index += 1; // Move pas the semi-colon
+                return Ok(Statement::Return(expr));
             }
             _ => {
                 // exprStmt -> expression ";"

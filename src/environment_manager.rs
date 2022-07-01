@@ -7,7 +7,14 @@ pub enum Object {
     True,
     False,
     Nil,
-    Callable(Vec<Vec<u8>>, Box<Statement>),
+    Callable(CallableObject),
+}
+
+#[derive(Clone)]
+pub struct CallableObject {
+    name: Vec<u8>,
+    parameters: Vec<Vec<u8>>,
+    function_block: Box<Statement>,
 }
 
 impl From<LiteralType> for Object {
@@ -67,8 +74,9 @@ impl std::fmt::Display for Object {
             Object::Nil => {
                 write!(f, "Nil")
             }
-            Object::Callable(_, _) => {
-                write!(f, "Callable object") // TODO expand a little bit more
+            Object::Callable(callable) => {
+                write!(f, "fn <{}>", std::str::from_utf8(&callable.name).unwrap())
+                // TODO expand a little bit more
             }
         }
     }

@@ -1,0 +1,5 @@
+fun my_function() {
+    return 666;
+}
+
+var a = my_function();
