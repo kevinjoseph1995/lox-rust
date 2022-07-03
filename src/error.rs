@@ -1,11 +1,14 @@
 use std::fmt::Display;
 
+use crate::environment_manager::Object;
+
 #[derive(Debug)]
 pub enum LoxError {
     IOError(std::io::Error),
     LexErr,
     ParserError(String),
     RuntimeError(String),
+    Return(Object),
 }
 
 impl Display for LoxError {
@@ -22,6 +25,9 @@ impl Display for LoxError {
             }
             LoxError::RuntimeError(err) => {
                 write!(f, "{}", err)
+            }
+            LoxError::Return(value) => {
+                write!(f, "{}", value)
             }
         }
     }

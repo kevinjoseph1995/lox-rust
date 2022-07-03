@@ -64,6 +64,9 @@ fn handle_statement(statement: &Statement, level: usize) {
             Some(expr) => println!("Return statement: {}", stringify(expr)),
             None => println!("Return statement"),
         },
+        Statement::Println(expression) => {
+            println!("Println statement: {}", stringify(&expression));
+        }
     }
 }
 

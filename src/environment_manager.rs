@@ -1,6 +1,6 @@
 use crate::parser::{LiteralType, Statement};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Object {
     Number(f64),
     String(Vec<u8>),
@@ -10,11 +10,12 @@ pub enum Object {
     Callable(CallableObject),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CallableObject {
-    name: Vec<u8>,
-    parameters: Vec<Vec<u8>>,
-    function_block: Box<Statement>,
+    pub name: Vec<u8>,
+    pub parameters: Vec<Vec<u8>>,
+    pub function_block: Box<Statement>,
+    pub parent_environment: *mut EnvironmentNode,
 }
 
 impl From<LiteralType> for Object {
@@ -95,7 +96,7 @@ pub fn is_true_value(value: &Object) -> bool {
         _ => false,
     }
 }
-
+#[derive(Debug)]
 struct NamedObject {
     name: Vec<u8>,
     object: Object,
@@ -152,98 +153,132 @@ impl Environment {
     }
 }
 
-pub type NodeID = usize;
-struct EnvironmentNode {
+pub struct EnvironmentNode {
     environment: Environment,
-    parent_id: Option<NodeID>,
-    children: Vec<NodeID>,
+    parent: *mut EnvironmentNode,
+    children: Vec<Box<EnvironmentNode>>,
+}
+
+impl EnvironmentNode {
+    fn new() -> Self {
+        Self {
+            environment: Environment::new(),
+            parent: std::ptr::null_mut(),
+            children: Vec::new(),
+        }
+    }
+}
+
+pub fn add_child(parent: *mut EnvironmentNode) -> *mut EnvironmentNode {
+    unsafe {
+        (*parent).children.push(Box::new(EnvironmentNode::new()));
+        let child = (*parent).children.last_mut().unwrap().as_mut();
+        child.parent = parent;
+        return child;
+    }
 }
 
 pub struct EnvironmentManager {
-    environment_arena: Vec<EnvironmentNode>,
-    environment_stack: Vec<NodeID>,
+    _global_environment: Box<EnvironmentNode>,
+    pub current: *mut EnvironmentNode,
 }
 
 impl EnvironmentManager {
     pub fn new() -> Self {
-        EnvironmentManager {
-            environment_arena: vec![EnvironmentNode {
-                environment: Environment::new(),
-                parent_id: None,
-                children: Vec::new(),
-            }],
-            environment_stack: vec![0],
+        let mut global_environment = Box::new(EnvironmentNode::new());
+        let ptr = global_environment.as_mut() as *mut EnvironmentNode;
+        Self {
+            _global_environment: global_environment,
+            current: ptr,
         }
     }
-
-    pub fn push_context(&mut self) {
-        let child_id = self.create_child(self.environment_stack.last().unwrap().clone());
-        self.environment_stack.push(child_id);
-    }
-
-    pub fn pop_context(&mut self) {
-        assert!(
-            self.environment_stack.len() > 1,
-            "Global environment should never be popped out"
-        );
-        self.environment_stack.pop();
-    }
-
-    fn create_child(&mut self, id: NodeID) -> NodeID {
-        let child_id = self.environment_arena.len();
-        self.environment_arena[id].children.push(child_id);
-        self.environment_arena.push(EnvironmentNode {
-            environment: Environment::new(),
-            parent_id: Some(id),
-            children: Vec::new(),
-        });
-
-        return self.environment_arena.len() - 1;
-    }
-
-    pub fn lookup(&mut self, name: &Vec<u8>) -> Option<&Object> {
-        let mut current_id = self.environment_stack.last().unwrap().clone();
-
-        loop {
-            if let Some(value) = self.environment_arena[current_id].environment.lookup(name) {
-                return Some(value);
-            }
-            if let Some(parent_id) = self.environment_arena[current_id].parent_id {
-                current_id = parent_id;
-            } else {
-                // Reached the root of our tree
-                break;
+    fn print_environment_node_helper(&mut self, node: *mut EnvironmentNode, indent: usize) {
+        unsafe {
+            for var in &(*node).environment.variables {
+                print!("{:<width$}", "", width = indent + 2);
+                println!(
+                    "name: {} value={}",
+                    std::str::from_utf8_unchecked(&var.name),
+                    var.object
+                );
             }
         }
-        None
-    }
-    pub fn update_or_add(&mut self, name: &Vec<u8>, value: Object) {
-        let id = self.environment_stack.last().unwrap().clone();
-        self.environment_arena[id]
-            .environment
-            .update_or_add(name, value)
     }
 
-    pub fn update(&mut self, name: &Vec<u8>, value: &Object) -> bool {
-        let id = self.environment_stack.last().unwrap().clone();
+    fn print_environment_tree_helper(&mut self, node: *mut EnvironmentNode, indent: usize) {
+        let current = node;
+        print!("{:<width$}", "", width = indent);
+        println!("{{");
+        unsafe {
+            self.print_environment_node_helper(current, indent);
+            for child in &mut (*current).children {
+                let child: *mut EnvironmentNode = child.as_mut();
+                self.print_environment_tree_helper(child, indent + 4);
+            }
+        }
+        print!("{:<width$}", "", width = indent);
+        println!("}}");
+    }
+    #[allow(dead_code)]
+    pub fn print_environment_tree(&mut self) {
+        let current: *mut EnvironmentNode = self._global_environment.as_mut();
+        self.print_environment_tree_helper(current, 0);
+    }
+    #[allow(dead_code)]
+    pub fn print_current_environment_node(&mut self) {
+        self.print_environment_tree_helper(self.current, 0);
+    }
 
-        let mut current_id = id;
-        loop {
-            let search_result = self.environment_arena[current_id]
-                .environment
-                .variables
-                .iter_mut()
-                .find(|x| Environment::name_comp(&(*x).name, &name));
-            if let Some(named_object) = search_result {
-                named_object.object = value.clone();
-                return true;
-            } else {
-                if let Some(parent_id) = self.environment_arena[current_id].parent_id {
-                    current_id = parent_id;
-                } else {
-                    return false;
+    pub fn lookup(&self, name: &Vec<u8>) -> Option<Object> {
+        unsafe {
+            let mut current = self.current;
+            loop {
+                if let Some(value) = (*current).environment.lookup(name) {
+                    return Some(value.clone());
                 }
+                if (*current).parent.is_null() {
+                    break;
+                }
+                current = (*current).parent;
             }
+            return None;
         }
+    }
+    pub fn update(&mut self, name: &Vec<u8>, value: &Object) -> bool {
+        unsafe {
+            let mut current = self.current;
+            loop {
+                if let Some(_) = (*current).environment.lookup(name) {
+                    (*current).environment.update_or_add(name, value.clone());
+                    return true;
+                }
+                if (*current).parent.is_null() {
+                    break;
+                }
+                current = (*current).parent;
+            }
+            return false;
+        }
+    }
+
+    pub fn update_or_add(&mut self, name: &Vec<u8>, value: Object) {
+        unsafe {
+            (*self.current).environment.update_or_add(name, value);
+        }
+    }
+
+    pub fn add_callable_object(
+        &mut self,
+        name: &Vec<u8>,
+        parameters: &Vec<Vec<u8>>,
+        body: &Box<Statement>,
+    ) {
+        let callable = CallableObject {
+            name: name.clone(),
+            parameters: parameters.clone(),
+            function_block: body.clone(),
+            parent_environment: self.current,
+        };
+        self.update_or_add(name, Object::Callable(callable));
     }
 }

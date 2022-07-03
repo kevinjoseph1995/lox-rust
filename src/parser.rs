@@ -19,10 +19,11 @@ impl Program {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Statement {
     Expression(Box<Expression>),
     Print(Box<Expression>),
+    Println(Box<Expression>),
     VariableDeclaration(Vec<u8>, Box<Expression>), // Identifier name and corresponding expression
     FunctionDeclaration(Vec<u8>, Vec<Vec<u8>>, Box<Statement>), // Function name, parameters and body
     Block(Vec<Statement>),
@@ -31,7 +32,7 @@ pub enum Statement {
     Return(Option<Box<Expression>>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Expression {
     Literal(LiteralType),
     Unary(UnaryOperator, Box<Expression>),
@@ -317,6 +318,12 @@ impl Parser {
                 self.index += 1;
                 let expr = self.get_expression_for_statement()?;
                 return Ok(Statement::Print(expr));
+            }
+            TokenType::Println => {
+                // printStmt -> "println" expression ";"
+                self.index += 1;
+                let expr = self.get_expression_for_statement()?;
+                return Ok(Statement::Println(expr));
             }
             TokenType::LeftBrace => {
                 self.index += 1;

@@ -1,4 +1,4 @@
-print "Scope and block statements";
+println "Scope and block statements";
 {
     var a = "global a";
     var b = "global b";
@@ -8,24 +8,24 @@ print "Scope and block statements";
     var b = "outer b";
     {
         var a = "inner a";
-        print a;
-        print b;
-        print c;
+        println a;
+        println b;
+        println c;
     }
-    print a;
-    print b;
-    print c;
+    println a;
+    println b;
+    println c;
     }
-    print a;
-    print b;
-    print c;
+    println a;
+    println b;
+    println c;
 }
 {
     var a = 10;
     {
-        print a;
+        println a;
         var b = a;
-        print b;
+        println b;
     }
                     
     {
@@ -36,9 +36,9 @@ print "Scope and block statements";
                     {
                         {
                             var b = a + 20;
-                            print b;
+                            println b;
                             b = c + a;
-                            print b;
+                            println b;
                         }
                     }
                 }
@@ -47,23 +47,51 @@ print "Scope and block statements";
     }
                         
     var b = 10;
-    print b;
+    println b;
 }
 
-print "While loops";
+println "While loops";
 {
     var i = 10;    
     while(i >= 0) {        
-        print i;
+        println i;
         i = i -1;        
     }
 }
 
-print "For Loops";
+println "For Loops";
 {
     var i = 0;
     for(i = 0; i < 10; i = i + 1) {
-        print i;
+        println i;
+    }    
+}
+
+println "Functions with recursion";
+{
+    fun fibonacci(n) {
+    if (n <= 1) return n;
+        return fibonacci(n - 2) + fibonacci(n - 1);
     }
-    
+
+    for (var i = 0; i < 5; i = i + 1) {
+        print i;
+        print "'th fibonacci: ";
+        println fibonacci(i);
+    }
+}
+
+println "Capturing environment around declaration";
+{
+    fun outer_scoped() {
+        var a = 10;
+        fun scoped_function() {
+            return a;
+        }
+        return scoped_function;
+    }
+
+    var inner_function = outer_scoped();
+    // Prints 10
+    println inner_function();
 }

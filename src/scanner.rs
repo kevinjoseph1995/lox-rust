@@ -13,6 +13,7 @@ const KEYWORD_MAP: &'static [(&'static str, TokenType)] = &[
     ("nil", TokenType::Nil),
     ("or", TokenType::Or),
     ("print", TokenType::Print),
+    ("println", TokenType::Println),
     ("return", TokenType::Return),
     ("super", TokenType::Super),
     ("this", TokenType::This),

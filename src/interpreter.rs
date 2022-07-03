@@ -1,4 +1,4 @@
-use crate::environment_manager::{is_true_value, EnvironmentManager, Object};
+use crate::environment_manager::{add_child, is_true_value, EnvironmentManager, Object};
 
 use crate::error::LoxError;
 use crate::parser::{
@@ -31,7 +31,7 @@ impl Interpreter {
             }
             Statement::Print(expression) => {
                 let result = self.evaluate(expression)?;
-                println!("{}", result)
+                print!("{}", result);
             }
             Statement::VariableDeclaration(name, expression) => {
                 let value = self.evaluate(expression)?;
@@ -39,11 +39,12 @@ impl Interpreter {
             }
             Statement::Block(block_statements) => {
                 // Entered new scope
-                self.environment_manager.push_context();
+                let prev = self.environment_manager.current;
+                self.environment_manager.current = add_child(self.environment_manager.current);
                 for statement in block_statements {
                     self.handle_statement(statement)?;
                 }
-                self.environment_manager.pop_context();
+                self.environment_manager.current = prev;
             }
             Statement::If(condition, then_clause, else_clause) => {
                 let condition_value = self.evaluate(condition)?;
@@ -62,10 +63,22 @@ impl Interpreter {
                     condition_value = self.evaluate(condition_expr)?;
                 }
             }
-            Statement::FunctionDeclaration(_name, _parameters, _body) => {
-                todo!();
+            Statement::FunctionDeclaration(name, parameters, body) => {
+                self.environment_manager
+                    .add_callable_object(name, parameters, body);
             }
-            Statement::Return(_) => todo!(),
+            Statement::Return(exp_opt) => {
+                if let Some(expression) = exp_opt {
+                    let value = self.evaluate(expression)?;
+                    return Err(LoxError::Return(value));
+                } else {
+                    return Err(LoxError::Return(Object::Nil));
+                }
+            }
+            Statement::Println(expression) => {
+                let result = self.evaluate(expression)?;
+                println!("{}", result)
+            }
         }
         Ok(())
     }
@@ -268,8 +281,51 @@ impl Interpreter {
                     }
                 }
             }
-            Expression::Call(_callee, _arguments) => {
-                todo!()
+            Expression::Call(call_expression, arguments) => {
+                let mut callable = self.evaluate(call_expression)?;
+                match &mut callable {
+                    Object::Callable(callable_object) => {
+                        if callable_object.parameters.len() != arguments.len() {
+                            // Check arity
+                            return Err(LoxError::RuntimeError(format!(
+                                "{} expects {} argument/s, found {}",
+                                std::str::from_utf8(&callable_object.name).unwrap(),
+                                callable_object.parameters.len(),
+                                arguments.len()
+                            )));
+                        }
+                        let mut arg_values = Vec::new();
+                        for arg_expr in arguments {
+                            let value = self.evaluate(arg_expr)?;
+                            arg_values.push(value);
+                        }
+                        let prev = self.environment_manager.current;
+                        self.environment_manager.current =
+                            add_child(callable_object.parent_environment);
+                        for (param, arg_value) in callable_object.parameters.iter().zip(arg_values)
+                        {
+                            self.environment_manager.update_or_add(param, arg_value);
+                        }
+                        let return_value: Result<Object, LoxError>;
+                        match self.handle_statement(&callable_object.function_block) {
+                            Ok(_) => return_value = Ok(Object::Nil),
+                            Err(err) => match err {
+                                LoxError::Return(value) => {
+                                    return_value = Ok(value);
+                                }
+                                _ => return Err(err),
+                            },
+                        }
+                        self.environment_manager.current = prev;
+                        return return_value;
+                    }
+                    _ => {
+                        return Err(LoxError::RuntimeError(format!(
+                            "{} is not a callable type",
+                            callable
+                        )))
+                    }
+                }
             }
         }
     }
