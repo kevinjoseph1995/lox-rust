@@ -8,7 +8,9 @@ pub fn visualize_program_ast(program: &Program) {
 }
 
 fn handle_statement(statement: &Statement, level: usize) {
-    print!("{:<width$}", "", width = level);
+    print!("{:<width$}{{", "", width = level);
+    println!("");
+    print!("{:<width$}  ", "", width = level);
     match statement {
         Statement::Expression(expression) => {
             println!("Expression statement {}", stringify(&expression));
@@ -68,6 +70,8 @@ fn handle_statement(statement: &Statement, level: usize) {
             println!("Println statement: {}", stringify(&expression));
         }
     }
+    print!("{:<width$}}}", "", width = level);
+    println!("");
 }
 
 fn stringify(expression: &Expression) -> String {

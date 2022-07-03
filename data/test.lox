@@ -95,3 +95,18 @@ println "Capturing environment around declaration";
     // Prints 10
     println inner_function();
 }
+
+println "Passing functions as value";
+fun outer_function() {
+    var message = "Hello World";
+    fun inner_function() {
+        fun inner_inner_function() {
+            return message;            
+        }
+        return inner_inner_function();
+    }
+    return inner_function;
+}
+
+var in = outer_function();
+println in();
