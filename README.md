@@ -55,7 +55,7 @@ println "Scope and block statements";
     var b = 10;
     println b;
 }
-
+///////////////////////////////////////////////////////////////
 println "While loops";
 {
     var i = 10;    
@@ -64,7 +64,7 @@ println "While loops";
         i = i -1;        
     }
 }
-
+///////////////////////////////////////////////////////////////
 println "For Loops";
 {
     var i = 0;
@@ -72,7 +72,7 @@ println "For Loops";
         println i;
     }    
 }
-
+///////////////////////////////////////////////////////////////
 println "Functions with recursion";
 {
     fun fibonacci(n) {
@@ -86,7 +86,7 @@ println "Functions with recursion";
         println fibonacci(i);
     }
 }
-
+///////////////////////////////////////////////////////////////
 println "Capturing environment around declaration";
 {
     fun outer_scoped() {
@@ -101,4 +101,18 @@ println "Capturing environment around declaration";
     // Prints 10
     println inner_function();
 }
-}```
+///////////////////////////////////////////////////////////////
+println "Passing functions as value";
+fun outer_function() {
+    var message = "Hello World";
+    fun inner_function() {
+        fun inner_inner_function() {
+            return message;            
+        }
+        return inner_inner_function();
+    }
+    return inner_function;
+}
+// message is not visible in this scope
+var in = outer_function();
+println in();}```

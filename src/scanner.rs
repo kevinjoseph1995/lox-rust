@@ -184,7 +184,6 @@ pub fn scan_tokens(input: &[u8]) -> Result<Vec<Token>, LoxError> {
                             break;
                         }
                         if input[index] == b'\n' {
-                            index += 1;
                             line_number += 1;
                             break;
                         }
