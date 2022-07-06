@@ -39,8 +39,9 @@ impl Interpreter {
             }
             Statement::Block(block_statements) => {
                 // Entered new scope
-                let prev = self.environment_manager.current;
-                self.environment_manager.current = add_child(self.environment_manager.current);
+                let prev = self.environment_manager.current.clone();
+                self.environment_manager.current =
+                    add_child(&mut self.environment_manager.current.upgrade().unwrap());
                 for statement in block_statements {
                     self.handle_statement(statement)?;
                 }
@@ -299,9 +300,9 @@ impl Interpreter {
                             let value = self.evaluate(arg_expr)?;
                             arg_values.push(value);
                         }
-                        let prev = self.environment_manager.current;
+                        let prev = self.environment_manager.current.clone();
                         self.environment_manager.current =
-                            add_child(callable_object.parent_environment);
+                            add_child(&mut callable_object.parent_environment.upgrade().unwrap());
                         for (param, arg_value) in callable_object.parameters.iter().zip(arg_values)
                         {
                             self.environment_manager.update_or_add(param, arg_value);

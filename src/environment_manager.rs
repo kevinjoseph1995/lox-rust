@@ -1,3 +1,9 @@
+use std::{
+    cell::RefCell,
+    fmt::{self, Debug, Formatter},
+    rc::{Rc, Weak},
+};
+
 use crate::parser::{LiteralType, Statement};
 
 #[derive(Clone, Debug)]
@@ -10,12 +16,22 @@ pub enum Object {
     Callable(CallableObject),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct CallableObject {
     pub name: Vec<u8>,
     pub parameters: Vec<Vec<u8>>,
     pub function_block: Box<Statement>,
-    pub parent_environment: *mut EnvironmentNode,
+    pub parent_environment: Weak<RefCell<EnvironmentNode>>,
+}
+
+impl Debug for CallableObject {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("")
+            .field(&self.name)
+            .field(&self.parameters)
+            .field(&self.function_block)
+            .finish()
+    }
 }
 
 impl From<LiteralType> for Object {
@@ -155,116 +171,134 @@ impl Environment {
 
 pub struct EnvironmentNode {
     environment: Environment,
-    parent: *mut EnvironmentNode,
-    children: Vec<Box<EnvironmentNode>>,
+    parent: Option<Weak<RefCell<EnvironmentNode>>>,
+    children: Vec<Rc<RefCell<EnvironmentNode>>>,
 }
 
 impl EnvironmentNode {
     fn new() -> Self {
         Self {
             environment: Environment::new(),
-            parent: std::ptr::null_mut(),
+            parent: None,
             children: Vec::new(),
         }
     }
 }
 
-pub fn add_child(parent: *mut EnvironmentNode) -> *mut EnvironmentNode {
-    unsafe {
-        (*parent).children.push(Box::new(EnvironmentNode::new()));
-        let child = (*parent).children.last_mut().unwrap().as_mut();
-        child.parent = parent;
-        return child;
-    }
+pub fn add_child(parent: &mut Rc<RefCell<EnvironmentNode>>) -> Weak<RefCell<EnvironmentNode>> {
+    let child = Rc::new(RefCell::new(EnvironmentNode::new()));
+    (*child).borrow_mut().parent = Some(Rc::downgrade(parent));
+    parent.as_ref().borrow_mut().children.push(child.clone());
+    return Rc::downgrade(&child);
 }
 
 pub struct EnvironmentManager {
-    _global_environment: Box<EnvironmentNode>,
-    pub current: *mut EnvironmentNode,
+    _global_environment: Rc<RefCell<EnvironmentNode>>,
+    pub current: Weak<RefCell<EnvironmentNode>>,
 }
 
 impl EnvironmentManager {
     pub fn new() -> Self {
-        let mut global_environment = Box::new(EnvironmentNode::new());
-        let ptr = global_environment.as_mut() as *mut EnvironmentNode;
+        let global_environment = Rc::new(RefCell::new(EnvironmentNode::new()));
+        let weak_ptr_to_global = Rc::downgrade(&global_environment);
         Self {
             _global_environment: global_environment,
-            current: ptr,
-        }
-    }
-    fn print_environment_node_helper(&mut self, node: *mut EnvironmentNode, indent: usize) {
-        unsafe {
-            for var in &(*node).environment.variables {
-                print!("{:<width$}", "", width = indent + 2);
-                println!(
-                    "name: {} value={}",
-                    std::str::from_utf8_unchecked(&var.name),
-                    var.object
-                );
-            }
+            current: weak_ptr_to_global,
         }
     }
 
-    fn print_environment_tree_helper(&mut self, node: *mut EnvironmentNode, indent: usize) {
-        let current = node;
+    fn print_environment_node_helper(&self, node: Weak<RefCell<EnvironmentNode>>, indent: usize) {
+        for var in &node.upgrade().unwrap().borrow().environment.variables {
+            print!("{:<width$}", "", width = indent + 2);
+            let name = std::str::from_utf8(&var.name).unwrap();
+            println!("name: {} value={}", name, var.object);
+        }
+    }
+
+    fn print_environment_tree_helper(
+        &mut self,
+        node: Weak<RefCell<EnvironmentNode>>,
+        indent: usize,
+    ) {
         print!("{:<width$}", "", width = indent);
         println!("{{");
-        unsafe {
-            self.print_environment_node_helper(current, indent);
-            for child in &mut (*current).children {
-                let child: *mut EnvironmentNode = child.as_mut();
-                self.print_environment_tree_helper(child, indent + 4);
-            }
+        self.print_environment_node_helper(node.clone(), indent);
+        for child in &node.upgrade().unwrap().borrow().children {
+            self.print_environment_tree_helper(Rc::downgrade(&child), indent + 4);
         }
         print!("{:<width$}", "", width = indent);
         println!("}}");
     }
     #[allow(dead_code)]
     pub fn print_environment_tree(&mut self) {
-        let current: *mut EnvironmentNode = self._global_environment.as_mut();
-        self.print_environment_tree_helper(current, 0);
+        self.print_environment_tree_helper(Rc::downgrade(&self._global_environment), 0);
     }
     #[allow(dead_code)]
     pub fn print_current_environment_node(&mut self) {
-        self.print_environment_tree_helper(self.current, 0);
+        self.print_environment_tree_helper(self.current.clone(), 0);
     }
 
     pub fn lookup(&self, name: &Vec<u8>) -> Option<Object> {
-        unsafe {
-            let mut current = self.current;
-            loop {
-                if let Some(value) = (*current).environment.lookup(name) {
+        let mut current = self.current.clone();
+        loop {
+            {
+                if let Some(value) = current.upgrade().unwrap().borrow().environment.lookup(name) {
                     return Some(value.clone());
                 }
-                if (*current).parent.is_null() {
-                    break;
-                }
-                current = (*current).parent;
             }
-            return None;
+            let parent;
+            {
+                match &current.upgrade().unwrap().borrow().parent {
+                    Some(p) => parent = p.clone(),
+                    None => break,
+                }
+                if current.upgrade().unwrap().borrow().parent.is_none() {}
+            }
+            current = parent;
         }
+        return None;
     }
     pub fn update(&mut self, name: &Vec<u8>, value: &Object) -> bool {
-        unsafe {
-            let mut current = self.current;
-            loop {
-                if let Some(_) = (*current).environment.lookup(name) {
-                    (*current).environment.update_or_add(name, value.clone());
+        let mut current = self.current.clone();
+        loop {
+            let found;
+            {
+                found = (*current.upgrade().unwrap())
+                    .borrow()
+                    .environment
+                    .lookup(name)
+                    .is_some();
+            }
+            {
+                if found {
+                    (*current.upgrade().unwrap())
+                        .borrow_mut()
+                        .environment
+                        .update_or_add(name, value.clone());
                     return true;
                 }
-                if (*current).parent.is_null() {
-                    break;
-                }
-                current = (*current).parent;
             }
-            return false;
+            let parent;
+            {
+                match &current.upgrade().unwrap().borrow().parent {
+                    Some(p) => parent = p.clone(),
+                    None => break,
+                }
+                if current.upgrade().unwrap().borrow().parent.is_none() {}
+            }
+            current = parent;
         }
+        return false;
     }
 
     pub fn update_or_add(&mut self, name: &Vec<u8>, value: Object) {
-        unsafe {
-            (*self.current).environment.update_or_add(name, value);
-        }
+        self.current
+            .upgrade()
+            .unwrap()
+            .as_ref()
+            .borrow_mut()
+            .environment
+            .update_or_add(name, value);
     }
 
     pub fn add_callable_object(
@@ -277,7 +311,7 @@ impl EnvironmentManager {
             name: name.clone(),
             parameters: parameters.clone(),
             function_block: body.clone(),
-            parent_environment: self.current,
+            parent_environment: self.current.clone(),
         };
         self.update_or_add(name, Object::Callable(callable));
     }
