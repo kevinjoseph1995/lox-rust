@@ -3,153 +3,8 @@ use crate::{
     tokens::{Token, TokenType},
 };
 use std::fmt::Debug;
-use std::str;
 
 const MAX_NUM_ARGUMENTS: usize = 64;
-
-pub struct Program {
-    pub statements: Vec<Statement>,
-}
-
-impl Program {
-    pub fn new() -> Program {
-        Program {
-            statements: Vec::<Statement>::new(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum Statement {
-    Expression(Box<Expression>),
-    Print(Box<Expression>),
-    Println(Box<Expression>),
-    VariableDeclaration(Vec<u8>, Box<Expression>), // Identifier name and corresponding expression
-    FunctionDeclaration(Vec<u8>, Vec<Vec<u8>>, Box<Statement>), // Function name, parameters and body
-    Block(Vec<Statement>),
-    If(Box<Expression>, Box<Statement>, Option<Box<Statement>>), // (Condition, Then-clause, Else-clause)
-    While(Box<Expression>, Box<Statement>),                      // Expr condition, Stmt body
-    Return(Option<Box<Expression>>),
-}
-
-#[derive(Clone, Debug)]
-pub enum Expression {
-    Literal(LiteralType),
-    Unary(UnaryOperator, Box<Expression>),
-    Binary(Box<Expression>, BinaryOperator, Box<Expression>),
-    Logical(Box<Expression>, LogicalOperator, Box<Expression>),
-    Grouping(Box<Expression>),
-    Identifier(Vec<u8>),
-    Assignment(Vec<u8>, Box<Expression>),
-    Call(Box<Expression>, Vec<Expression>), // Callee and list of arguments
-}
-
-#[derive(Clone)]
-pub enum UnaryOperator {
-    Negate,
-    Not,
-}
-
-impl Debug for UnaryOperator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Negate => write!(f, "-"),
-            Self::Not => write!(f, "!"),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub enum BinaryOperator {
-    Equal,
-    NotEqual,
-    LessThan,
-    LessThanEqual,
-    GreaterThan,
-    GreaterThanEqual,
-    Plus,
-    Minus,
-    Multiply,
-    Divide,
-}
-
-impl Debug for BinaryOperator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Equal => write!(f, "="),
-            Self::NotEqual => write!(f, "!="),
-            Self::LessThan => write!(f, "<"),
-            Self::LessThanEqual => write!(f, "<="),
-            Self::GreaterThan => write!(f, ">"),
-            Self::GreaterThanEqual => write!(f, ">="),
-            Self::Plus => write!(f, "+"),
-            Self::Minus => write!(f, "-"),
-            Self::Multiply => write!(f, "*"),
-            Self::Divide => write!(f, "/"),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub enum LogicalOperator {
-    Or,
-    And,
-}
-
-impl Debug for LogicalOperator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Or => write!(f, "or"),
-            Self::And => write!(f, "and"),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub enum LiteralType {
-    Number(f64),
-    String(Vec<u8>),
-    True,
-    False,
-    Nil,
-}
-
-impl LiteralType {
-    #[allow(dead_code)]
-    pub fn take(&mut self) -> Self {
-        match self {
-            Self::Number(arg0) => Self::Number(std::mem::take(arg0)),
-            Self::String(arg0) => Self::String(std::mem::take(arg0)),
-            Self::True => Self::True,
-            Self::False => Self::False,
-            Self::Nil => Self::Nil,
-        }
-    }
-}
-
-impl Debug for LiteralType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Number(arg0) => write!(f, "{}", arg0),
-            Self::String(arg0) => write!(f, "{}", str::from_utf8(arg0).unwrap()),
-            Self::True => write!(f, "True"),
-            Self::False => write!(f, "False"),
-            Self::Nil => write!(f, "Nil"),
-        }
-    }
-}
-
-fn report_error(error: LoxError, current_token: Option<&Token>) {
-    if let Some(token) = current_token {
-        eprintln!(
-            "\x1b[1;31mError: {}. Processing token on line {} Col-[{}:{}] \x1b[0m",
-            error,
-            token.line_number,
-            token.start,
-            token.start + token.length
-        );
-    }
-}
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -437,9 +292,13 @@ impl Parser {
                 if let Some(update_expr) = update {
                     inner_block_statements.push(Statement::Expression(update_expr));
                 }
-
+                assert!(
+                    condition.is_some(),
+                    "Internal error, this condition should not have fired"
+                );
+                let condition = condition.unwrap();
                 outer_block_statements.push(Statement::While(
-                    condition.unwrap(),
+                    condition,
                     Box::new(Statement::Block(inner_block_statements)),
                 ));
 
@@ -868,5 +727,149 @@ impl Parser {
                 self.index, &self.tokens[self.index].line_number
             ))),
         }
+    }
+}
+
+pub struct Program {
+    pub statements: Vec<Statement>,
+}
+
+impl Program {
+    pub fn new() -> Program {
+        Program {
+            statements: Vec::<Statement>::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum Statement {
+    Expression(Box<Expression>),
+    Print(Box<Expression>),
+    Println(Box<Expression>),
+    VariableDeclaration(String, Box<Expression>), // Identifier name and corresponding expression
+    FunctionDeclaration(String, Vec<String>, Box<Statement>), // Function name, parameters and body
+    Block(Vec<Statement>),
+    If(Box<Expression>, Box<Statement>, Option<Box<Statement>>), // (Condition, Then-clause, Else-clause)
+    While(Box<Expression>, Box<Statement>),                      // Expr condition, Stmt body
+    Return(Option<Box<Expression>>),
+}
+
+#[derive(Clone, Debug)]
+pub enum Expression {
+    Literal(LiteralType),
+    Unary(UnaryOperator, Box<Expression>),
+    Binary(Box<Expression>, BinaryOperator, Box<Expression>),
+    Logical(Box<Expression>, LogicalOperator, Box<Expression>),
+    Grouping(Box<Expression>),
+    Identifier(String),
+    Assignment(String, Box<Expression>),
+    Call(Box<Expression>, Vec<Expression>), // Callee and list of arguments
+}
+
+#[derive(Clone)]
+pub enum UnaryOperator {
+    Negate,
+    Not,
+}
+
+impl Debug for UnaryOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Negate => write!(f, "-"),
+            Self::Not => write!(f, "!"),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum BinaryOperator {
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanEqual,
+    GreaterThan,
+    GreaterThanEqual,
+    Plus,
+    Minus,
+    Multiply,
+    Divide,
+}
+
+impl Debug for BinaryOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Equal => write!(f, "="),
+            Self::NotEqual => write!(f, "!="),
+            Self::LessThan => write!(f, "<"),
+            Self::LessThanEqual => write!(f, "<="),
+            Self::GreaterThan => write!(f, ">"),
+            Self::GreaterThanEqual => write!(f, ">="),
+            Self::Plus => write!(f, "+"),
+            Self::Minus => write!(f, "-"),
+            Self::Multiply => write!(f, "*"),
+            Self::Divide => write!(f, "/"),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum LogicalOperator {
+    Or,
+    And,
+}
+
+impl Debug for LogicalOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Or => write!(f, "or"),
+            Self::And => write!(f, "and"),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum LiteralType {
+    Number(f64),
+    String(String),
+    True,
+    False,
+    Nil,
+}
+
+impl LiteralType {
+    #[allow(dead_code)]
+    pub fn take(&mut self) -> Self {
+        match self {
+            Self::Number(arg0) => Self::Number(std::mem::take(arg0)),
+            Self::String(arg0) => Self::String(std::mem::take(arg0)),
+            Self::True => Self::True,
+            Self::False => Self::False,
+            Self::Nil => Self::Nil,
+        }
+    }
+}
+
+impl Debug for LiteralType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Number(arg0) => write!(f, "{}", arg0),
+            Self::String(arg0) => write!(f, "{}", arg0),
+            Self::True => write!(f, "True"),
+            Self::False => write!(f, "False"),
+            Self::Nil => write!(f, "Nil"),
+        }
+    }
+}
+
+fn report_error(error: LoxError, current_token: Option<&Token>) {
+    if let Some(token) = current_token {
+        eprintln!(
+            "\x1b[1;31mError: {}. Processing token on line {} Col-[{}:{}] \x1b[0m",
+            error,
+            token.line_number,
+            token.start,
+            token.start + token.length
+        );
     }
 }

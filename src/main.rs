@@ -4,7 +4,6 @@ use std::{
 };
 
 mod ast_printer;
-mod environment_manager;
 mod error;
 mod interpreter;
 mod parser;
@@ -14,7 +13,6 @@ mod tokens;
 use error::LoxError;
 use interpreter::Interpreter;
 use parser::Parser;
-use scanner::scan_tokens;
 
 fn main() -> Result<(), LoxError> {
     let args: Vec<_> = env::args().collect();
@@ -76,7 +74,7 @@ fn run(line: &str, interpreter: &mut Interpreter) {
 
 fn run_wrapper(line: &str, interpreter: &mut Interpreter) -> Result<(), LoxError> {
     // Scan
-    let tokens = scan_tokens(&(line.as_bytes()))?;
+    let tokens = scanner::scan_tokens(&(line.as_bytes()))?;
     // println!("{:#?}", tokens);
     let mut parser = Parser::new(tokens);
     let program = parser.parse()?;

@@ -19,7 +19,6 @@ fn handle_statement(statement: &Statement, level: usize) {
             println!("Print statement: {}", stringify(&expression));
         }
         Statement::VariableDeclaration(variable_name, expression) => {
-            let variable_name = std::str::from_utf8(variable_name).unwrap();
             println!(
                 "Variable declaration var {} = {}",
                 variable_name,
@@ -51,9 +50,9 @@ fn handle_statement(statement: &Statement, level: usize) {
         }
         Statement::FunctionDeclaration(function_name, parameters, body) => {
             let mut string_to_print: String = "Function Declaration: ".to_string();
-            string_to_print = string_to_print + std::str::from_utf8(function_name).unwrap() + "(";
+            string_to_print = string_to_print + function_name + "(";
             for param in parameters {
-                string_to_print = string_to_print + std::str::from_utf8(param).unwrap() + ","
+                string_to_print = string_to_print + param + ","
             }
             string_to_print += "{";
 
@@ -94,12 +93,10 @@ fn stringify(expression: &Expression) -> String {
             format!("(Grouping {:?})", stringify(&expression))
         }
         Expression::Identifier(name) => {
-            let name_str = std::str::from_utf8(name).unwrap();
-            format!("(Identifier {})", name_str)
+            format!("(Identifier {})", name)
         }
         Expression::Assignment(name, expression) => {
-            let name_str = std::str::from_utf8(name).unwrap();
-            format!("(Assignment {} = {:?})", name_str, stringify(&expression))
+            format!("(Assignment {} = {:?})", name, stringify(&expression))
         }
         Expression::Logical(lhs, op, rhs) => {
             format!("(Logical {} {:?} {})", stringify(&lhs), op, stringify(&rhs))

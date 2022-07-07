@@ -22,8 +22,8 @@ pub enum TokenType {
     Less,
     LessEqual,
     // Literals.
-    Identifier(Vec<u8>),
-    StringLiteral(Vec<u8>),
+    Identifier(String),
+    StringLiteral(String),
     NumberLiteral(f64),
     // Keywords.
     And,

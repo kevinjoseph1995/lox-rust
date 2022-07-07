@@ -225,9 +225,10 @@ pub fn scan_tokens(input: &[u8]) -> Result<Vec<Token>, LoxError> {
                     found_error = true;
                     println!("Unterminated string");
                 }
+                let decoded_string = std::str::from_utf8(&input[start..index + 1])?;
                 output_tokens.push(Token {
                     line_number: start_line_number,
-                    token_type: TokenType::StringLiteral(input[start..index + 1].to_vec()),
+                    token_type: TokenType::StringLiteral(decoded_string.to_string()),
                     start: start_column,
                     length: index + 1 - start + 2,
                 });
@@ -286,9 +287,10 @@ pub fn scan_tokens(input: &[u8]) -> Result<Vec<Token>, LoxError> {
                         });
                     }
                     _ => {
+                        let decoded_string = std::str::from_utf8(&input[start..index + 1])?;
                         output_tokens.push(Token {
                             line_number,
-                            token_type: TokenType::Identifier(input[start..index + 1].to_vec()),
+                            token_type: TokenType::Identifier(decoded_string.to_string()),
                             start: start_column,
                             length: name.len(),
                         });

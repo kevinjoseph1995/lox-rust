@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::environment_manager::Object;
+use crate::interpreter::Object;
 
 #[derive(Debug)]
 pub enum LoxError {
