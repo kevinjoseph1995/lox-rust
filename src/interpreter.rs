@@ -9,8 +9,8 @@ use crate::parser::{
 };
 
 pub struct Interpreter {
-    _global_environment: Rc<RefCell<EnvironmentNode>>,
-    current: Weak<RefCell<EnvironmentNode>>,
+    global_environment: Rc<RefCell<EnvironmentNode>>, // Root of our environment tree. Keeps all the other nodes alive
+    current: Weak<RefCell<EnvironmentNode>>, // Points to the current environment based on what state the interpreter's is in
 }
 
 impl Interpreter {
@@ -18,7 +18,7 @@ impl Interpreter {
         let global_environment = Rc::new(RefCell::new(EnvironmentNode::new()));
         let weak_ptr_to_global = Rc::downgrade(&global_environment);
         Interpreter {
-            _global_environment: global_environment,
+            global_environment,
             current: weak_ptr_to_global,
         }
     }
@@ -354,7 +354,7 @@ impl Interpreter {
     }
     #[allow(dead_code)]
     fn print_environment_tree(&mut self) {
-        self.print_environment_tree_helper(Rc::downgrade(&self._global_environment), 0);
+        self.print_environment_tree_helper(Rc::downgrade(&self.global_environment), 0);
     }
     #[allow(dead_code)]
     fn print_current_environment_node(&mut self) {
@@ -364,18 +364,16 @@ impl Interpreter {
     fn lookup(&self, name: &String) -> Option<Object> {
         let mut current = self.current.clone();
         loop {
-            {
-                if let Some(value) = current.upgrade().unwrap().borrow().environment.lookup(name) {
-                    return Some(value.clone());
-                }
+            let rc = current.upgrade().unwrap();
+            let current_ref = rc.borrow();
+            if let Some(value) = current_ref.environment.lookup(name) {
+                return Some(value.clone());
             }
             let parent;
-            {
-                match &current.upgrade().unwrap().borrow().parent {
-                    Some(p) => parent = p.clone(),
-                    None => break,
-                }
-                if current.upgrade().unwrap().borrow().parent.is_none() {}
+
+            match &current_ref.parent {
+                Some(p) => parent = p.clone(),
+                None => break,
             }
             current = parent;
         }
@@ -384,30 +382,20 @@ impl Interpreter {
     fn update(&mut self, name: &String, value: &Object) -> bool {
         let mut current = self.current.clone();
         loop {
-            let found;
-            {
-                found = (*current.upgrade().unwrap())
-                    .borrow()
+            let rc = current.upgrade().unwrap();
+            let mut current_mut_ref = rc.borrow_mut();
+
+            if current_mut_ref.environment.lookup(name).is_some() {
+                current_mut_ref
                     .environment
-                    .lookup(name)
-                    .is_some();
+                    .update_or_add(name, value.clone());
+                return true;
             }
-            {
-                if found {
-                    (*current.upgrade().unwrap())
-                        .borrow_mut()
-                        .environment
-                        .update_or_add(name, value.clone());
-                    return true;
-                }
-            }
+
             let parent;
-            {
-                match &current.upgrade().unwrap().borrow().parent {
-                    Some(p) => parent = p.clone(),
-                    None => break,
-                }
-                if current.upgrade().unwrap().borrow().parent.is_none() {}
+            match &current_mut_ref.parent {
+                Some(p) => parent = p.clone(),
+                None => break,
             }
             current = parent;
         }
