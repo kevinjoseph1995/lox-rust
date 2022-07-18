@@ -6,14 +6,21 @@ use std::fmt::Debug;
 
 const MAX_NUM_ARGUMENTS: usize = 64;
 
+pub type IdentifierId = u64;
+
 pub struct Parser {
     tokens: Vec<Token>,
     index: usize,
+    current_identifier_id: u64,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, index: 0 }
+        Parser {
+            tokens,
+            index: 0,
+            current_identifier_id: 0,
+        }
     }
 
     pub fn parse(&mut self) -> Result<Program, LoxError> {
@@ -419,8 +426,9 @@ impl Parser {
             self.index += 1; // Move past the "="
             let value = self.assignment()?;
             // Validate that the LHS is an expression that we can assign to. For now only variable identifiers are assignable
-            if let Expression::Identifier(name) = lhs.as_mut() {
+            if let Expression::Identifier(id, name) = lhs.as_mut() {
                 return Ok(Box::new(Expression::Assignment(
+                    id.clone(),
                     std::mem::take(name),
                     value,
                 )));
@@ -718,9 +726,12 @@ impl Parser {
             }
             TokenType::Identifier(identifier_name) => {
                 self.index += 1;
-                Ok(Box::new(Expression::Identifier(std::mem::take(
-                    identifier_name,
-                ))))
+                let id = self.current_identifier_id;
+                self.current_identifier_id += 1;
+                Ok(Box::new(Expression::Identifier(
+                    id,
+                    std::mem::take(identifier_name),
+                )))
             }
             _ => Err(LoxError::ParserError(format!(
                 "Parser error, current index:{}, line number:{}",
@@ -762,8 +773,8 @@ pub enum Expression {
     Binary(Box<Expression>, BinaryOperator, Box<Expression>),
     Logical(Box<Expression>, LogicalOperator, Box<Expression>),
     Grouping(Box<Expression>),
-    Identifier(String),
-    Assignment(String, Box<Expression>),
+    Identifier(IdentifierId, String),
+    Assignment(IdentifierId, String, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>), // Callee and list of arguments
 }
 

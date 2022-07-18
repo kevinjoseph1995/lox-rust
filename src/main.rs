@@ -7,6 +7,7 @@ mod ast_printer;
 mod error;
 mod interpreter;
 mod parser;
+mod resolver;
 mod scanner;
 mod tokens;
 
@@ -80,6 +81,7 @@ fn run_wrapper(line: &str, interpreter: &mut Interpreter) -> Result<(), LoxError
     let program = parser.parse()?;
 
     // ast_printer::visualize_program_ast(&program); //  Uncomment me to visualize the AST
+
     interpreter.interpret(program)?;
 
     Ok(())

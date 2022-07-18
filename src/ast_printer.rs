@@ -92,11 +92,16 @@ fn stringify(expression: &Expression) -> String {
         Expression::Grouping(expression) => {
             format!("(Grouping {:?})", stringify(&expression))
         }
-        Expression::Identifier(name) => {
-            format!("(Identifier {})", name)
+        Expression::Identifier(id, name) => {
+            format!("(Identifier(id={}) {})", id, name)
         }
-        Expression::Assignment(name, expression) => {
-            format!("(Assignment {} = {:?})", name, stringify(&expression))
+        Expression::Assignment(id, name, expression) => {
+            format!(
+                "(Assignment(id={}) {} = {:?})",
+                id,
+                name,
+                stringify(&expression)
+            )
         }
         Expression::Logical(lhs, op, rhs) => {
             format!("(Logical {} {:?} {})", stringify(&lhs), op, stringify(&rhs))

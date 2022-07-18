@@ -115,4 +115,41 @@ fun outer_function() {
 }
 // message is not visible in this scope
 var in = outer_function();
-println in();}```
+println in();
+
+///////////////////////////////////////////////////////////////
+println "Demonstrating variable resolution";
+{
+var a = "global";
+{
+  fun showA() {
+    println a;
+  }
+
+  showA();
+  var a = "block";
+  showA();
+}
+
+
+fun function_a() {
+    println "A";
+}
+
+{
+    fun call_function_a() {
+        function_a();
+    }
+
+    call_function_a(); // Should print A
+
+    // Create a new function with the same name in current scope
+    fun function_a() {
+        println "B";
+    }
+
+    call_function_a(); // Should print "A"
+    function_a(); // Should print "B"
+}
+}
+```

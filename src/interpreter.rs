@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::rc::{Rc, Weak};
@@ -7,10 +8,13 @@ use crate::error::LoxError;
 use crate::parser::{
     BinaryOperator, Expression, LiteralType, LogicalOperator, Program, Statement, UnaryOperator,
 };
+use crate::resolver;
+use crate::resolver::DistanceTable;
 
 pub struct Interpreter {
     global_environment: Rc<RefCell<EnvironmentNode>>, // Root of our environment tree. Keeps all the other nodes alive
     current: Weak<RefCell<EnvironmentNode>>, // Points to the current environment based on what state the interpreter's is in
+    local_variable_resolution_table: DistanceTable,
 }
 
 impl Interpreter {
@@ -20,10 +24,12 @@ impl Interpreter {
         Interpreter {
             global_environment,
             current: weak_ptr_to_global,
+            local_variable_resolution_table: HashMap::new(),
         }
     }
 
     pub fn interpret(&mut self, program: Program) -> Result<(), LoxError> {
+        self.local_variable_resolution_table = resolver::resolve_variables(&program)?;
         let mut statements = program.statements;
         for statement in &mut statements {
             self.handle_statement(statement)?;
@@ -238,8 +244,16 @@ impl Interpreter {
                     },
                 }
             }
-            Expression::Identifier(name) => {
-                if let Some(value) = self.lookup(&name) {
+            Expression::Identifier(id, name) => {
+                if let Some(distance) = self.local_variable_resolution_table.get(id) {
+                    if let Some(value) = self.lookup_at_distance(&name, distance.clone()) {
+                        return Ok(value.clone());
+                    } else {
+                        return Err(LoxError::InternalError(format!(
+                            "Local variable lookup based on resolution table did not work"
+                        )));
+                    }
+                } else if let Some(value) = self.lookup_global(&name) {
                     return Ok(value.clone()); // Find a better way to do lookup without copying
                 } else {
                     return Err(LoxError::RuntimeError(format!(
@@ -248,7 +262,7 @@ impl Interpreter {
                     )));
                 }
             }
-            Expression::Assignment(name, expr) => {
+            Expression::Assignment(_id, name, expr) => {
                 let new_value = self.evaluate(expr)?;
                 if self.update(&name, &new_value) {
                     return Ok(Object::Nil);
@@ -361,6 +375,36 @@ impl Interpreter {
         self.print_environment_tree_helper(self.current.clone(), 0);
     }
 
+    fn lookup_global(&self, name: &String) -> Option<Object> {
+        if let Some(value) = self.global_environment.borrow().environment.lookup(name) {
+            Some(value.clone())
+        } else {
+            None
+        }
+    }
+
+    fn lookup_at_distance(&self, name: &String, distance: usize) -> Option<Object> {
+        let mut current = self.current.clone();
+        for _ in 0..distance {
+            let rc = current.upgrade().unwrap();
+            let current_ref = rc.borrow();
+            let parent;
+            match &current_ref.parent {
+                Some(p) => parent = p.clone(),
+                None => break,
+            }
+            current = parent;
+        }
+        let rc = current.upgrade().unwrap();
+        let current_ref = rc.borrow();
+        if let Some(value) = current_ref.environment.lookup(name) {
+            Some(value.clone())
+        } else {
+            None
+        }
+    }
+
+    #[allow(dead_code)]
     fn lookup(&self, name: &String) -> Option<Object> {
         let mut current = self.current.clone();
         loop {

@@ -8,6 +8,7 @@ pub enum LoxError {
     LexErr,
     ParserError(String),
     RuntimeError(String),
+    InternalError(String),
     Return(Object),
 }
 
@@ -29,6 +30,7 @@ impl Display for LoxError {
             LoxError::Return(value) => {
                 write!(f, "{}", value)
             }
+            LoxError::InternalError(err) => write!(f, "{}", err),
         }
     }
 }
