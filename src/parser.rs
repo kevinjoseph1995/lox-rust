@@ -58,6 +58,7 @@ impl Parser {
         if found_error {
             return Err(LoxError::ParserError("Found parse error".to_string()));
         }
+        program.num_of_identifiers = self.current_identifier_id;
         Ok(program)
     }
 
@@ -743,12 +744,14 @@ impl Parser {
 
 pub struct Program {
     pub statements: Vec<Statement>,
+    pub num_of_identifiers: u64,
 }
 
 impl Program {
     pub fn new() -> Program {
         Program {
             statements: Vec::<Statement>::new(),
+            num_of_identifiers: 0,
         }
     }
 }

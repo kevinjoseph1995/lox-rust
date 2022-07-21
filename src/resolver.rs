@@ -1,15 +1,16 @@
 use crate::{
     error::LoxError,
-    parser::{Expression, IdentifierId, Program, Statement},
+    parser::{Expression, Program, Statement},
 };
 use std::collections::HashMap;
 
-pub type DistanceTable = HashMap<IdentifierId, usize>;
+pub type DistanceTable = Vec<Option<usize>>;
 
 type ScopeStack = Vec<HashMap<String, bool>>;
 
 pub fn resolve_variables(program: &Program) -> Result<DistanceTable, LoxError> {
-    let mut local_variable_lookup_distance_table: DistanceTable = HashMap::new();
+    let mut local_variable_lookup_distance_table: DistanceTable =
+        vec![None; program.num_of_identifiers as usize];
     let mut scopes: ScopeStack = Vec::new();
     for statement in &program.statements {
         visit_statement(
@@ -136,7 +137,7 @@ fn visit_expression(
             }
             for (distance, scope) in scopes.iter().rev().enumerate() {
                 if scope.contains_key(name) {
-                    local_table.insert(id.clone(), distance);
+                    local_table[*id as usize] = Some(distance);
                     break;
                 }
             }
@@ -146,7 +147,7 @@ fn visit_expression(
             visit_expression(expression, scopes, local_table)?;
             for (distance, scope) in scopes.iter().rev().enumerate() {
                 if scope.contains_key(name) {
-                    local_table.insert(id.clone(), distance);
+                    local_table[*id as usize] = Some(distance);
                 }
             }
             Ok(())

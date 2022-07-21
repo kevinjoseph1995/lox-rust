@@ -24,7 +24,7 @@ impl Interpreter {
         Interpreter {
             global_environment,
             current: weak_ptr_to_global,
-            local_variable_resolution_table: HashMap::new(),
+            local_variable_resolution_table: Vec::new(),
         }
     }
 
@@ -245,7 +245,7 @@ impl Interpreter {
                 }
             }
             Expression::Identifier(id, name) => {
-                if let Some(distance) = self.local_variable_resolution_table.get(id) {
+                if let Some(distance) = self.local_variable_resolution_table[*id as usize] {
                     if let Some(value) = self.lookup_at_distance(&name, distance.clone()) {
                         return Ok(value.clone());
                     } else {
@@ -254,7 +254,7 @@ impl Interpreter {
                         )));
                     }
                 } else if let Some(value) = self.lookup_global(&name) {
-                    return Ok(value.clone()); // Find a better way to do lookup without copying
+                    return Ok(value.clone());
                 } else {
                     return Err(LoxError::RuntimeError(format!(
                         "Use of undeclared variable {}",
@@ -262,9 +262,17 @@ impl Interpreter {
                     )));
                 }
             }
-            Expression::Assignment(_id, name, expr) => {
+            Expression::Assignment(id, name, expr) => {
                 let new_value = self.evaluate(expr)?;
-                if self.update(&name, &new_value) {
+                if let Some(distance) = self.local_variable_resolution_table[*id as usize] {
+                    if self.update_at_distance(&name, &new_value, distance) {
+                        return Ok(Object::Nil);
+                    } else {
+                        return Err(LoxError::InternalError(format!(
+                            "Local variable lookup based on resolution table did not work"
+                        )));
+                    }
+                } else if self.update_global(&name, &new_value) {
                     return Ok(Object::Nil);
                 } else {
                     return Err(LoxError::RuntimeError(format!(
@@ -346,9 +354,9 @@ impl Interpreter {
         }
     }
     fn print_environment_node_helper(&self, node: Weak<RefCell<EnvironmentNode>>, indent: usize) {
-        for var in &node.upgrade().unwrap().borrow().environment.variables {
+        for (name, object) in &node.upgrade().unwrap().borrow().environment.variables {
             print!("{:<width$}", "", width = indent + 2);
-            println!("name: {} value={}", &var.name, var.object);
+            println!("name: {} value={}", name, object);
         }
     }
 
@@ -404,6 +412,28 @@ impl Interpreter {
         }
     }
 
+    fn update_at_distance(&mut self, name: &String, value: &Object, distance: usize) -> bool {
+        let mut current = self.current.clone();
+        for _ in 0..distance {
+            let rc = current.upgrade().unwrap();
+            let current_ref = rc.borrow();
+            let parent;
+            match &current_ref.parent {
+                Some(p) => parent = p.clone(),
+                None => break,
+            }
+            current = parent;
+        }
+        let rc = current.upgrade().unwrap();
+        let mut current_ref = rc.borrow_mut();
+        if let Some(_) = current_ref.environment.lookup(name) {
+            current_ref.environment.update_or_add(&name, value.clone());
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     #[allow(dead_code)]
     fn lookup(&self, name: &String) -> Option<Object> {
         let mut current = self.current.clone();
@@ -423,6 +453,17 @@ impl Interpreter {
         }
         return None;
     }
+
+    fn update_global(&mut self, name: &String, value: &Object) -> bool {
+        let mut env = (*self.global_environment).borrow_mut();
+        if env.environment.lookup(name).is_some() {
+            env.environment.update_or_add(&name, value.clone());
+            return true;
+        }
+        return false;
+    }
+
+    #[allow(dead_code)]
     fn update(&mut self, name: &String, value: &Object) -> bool {
         let mut current = self.current.clone();
         loop {
@@ -573,38 +614,32 @@ fn is_true_value(value: &Object) -> bool {
         _ => false,
     }
 }
-#[derive(Debug)]
-struct NamedObject {
-    name: String,
-    object: Object,
-}
 
 struct Environment {
-    variables: Vec<NamedObject>,
+    variables: HashMap<String, Object>,
 }
 
 impl Environment {
     fn new() -> Self {
         Environment {
-            variables: Vec::new(),
+            variables: HashMap::new(),
         }
     }
 
     fn lookup(&self, name: &String) -> Option<&Object> {
-        if let Some(name_value_pair) = self.variables.iter().find(|x| &(*x).name == name) {
-            return Some(&name_value_pair.object);
+        let lookup_result = self.variables.get(name);
+        if let Some(value) = lookup_result {
+            return Some(&value);
         }
         return None;
     }
 
     fn update_or_add(&mut self, name: &String, value: Object) {
-        if let Some(name_value_pair) = self.variables.iter_mut().find(|x| &(*x).name == name) {
-            name_value_pair.object = value
+        let lookup_result = self.variables.get_mut(name);
+        if let Some(object) = lookup_result {
+            *object = value;
         } else {
-            self.variables.push(NamedObject {
-                name: name.clone(),
-                object: value,
-            });
+            self.variables.insert(name.clone(), value);
         }
     }
 }

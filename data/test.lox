@@ -146,3 +146,17 @@ fun function_a() {
     function_a(); // Should print "B"
 }
 }
+
+///////////////////////////////////////////////////////////////
+println "Cached lookups";
+{
+var a  = "*";
+
+for(var i = 0; i < 9; i = i + 1) {    
+    for(var j = 0; j < i; j = j + 1) {
+        print a;
+    }
+    println "";
+}
+
+}
