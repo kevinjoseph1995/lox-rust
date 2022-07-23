@@ -160,3 +160,18 @@ for(var i = 0; i < 9; i = i + 1) {
 }
 
 }
+///////////////////////////////////////////////////////////////
+println "Chaining function calls";
+{
+    fun A() {
+        fun B() {
+            fun C() {
+                var message = "Hello World";
+                println message;
+            }
+            return C;
+        }
+        return B;
+    }
+    A()()();
+}

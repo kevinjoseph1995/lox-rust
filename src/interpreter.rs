@@ -98,7 +98,7 @@ impl Interpreter {
                 println!("{}", result)
             }
             Statement::ClassDeclaration(name, _member_functions) => {
-                let class_object = ClassObject { name: name.clone() };
+                let class_object = LoxClass { name: name.clone() };
                 self.update_or_add(name, Object::Class(class_object));
             }
         }
@@ -365,6 +365,19 @@ impl Interpreter {
                     }
                 }
             }
+            Expression::Get(expression, name) => {
+                let instance = self.evaluate(expression)?;
+                match instance {
+                    Object::Class(name) => todo!(),
+                    _ => {
+                        return Err(LoxError::RuntimeError(
+                            "Get expressions can only be evaluated on instances of classes"
+                                .to_string(),
+                        ))
+                    }
+                }
+                todo!()
+            }
         }
     }
     fn print_environment_node_helper(&self, node: Weak<RefCell<EnvironmentNode>>, indent: usize) {
@@ -520,14 +533,14 @@ pub enum Object {
     False,
     Nil,
     Callable(CallableObject),
-    Class(ClassObject),
+    Class(LoxClass),
 }
 #[derive(Clone)]
-pub struct ClassObject {
+pub struct LoxClass {
     name: String,
 }
 
-impl Debug for ClassObject {
+impl Debug for LoxClass {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple(&self.name).finish()
     }

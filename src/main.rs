@@ -67,7 +67,7 @@ fn run_from_file(filename: &str, interpreter: &mut Interpreter) -> Result<(), Lo
 fn run(line: &str, interpreter: &mut Interpreter) {
     match run_wrapper(&line, interpreter) {
         Err(err) => {
-            println!("[\x1b[1;31mRuntime Error\x1b[0m] {}", err);
+            println!("[\x1b[1;31mError\x1b[0m] {}", err);
         }
         Ok(_) => {}
     }

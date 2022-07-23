@@ -121,5 +121,8 @@ fn stringify(expression: &Expression) -> String {
             }
             str + ");"
         }
+        Expression::Get(expr, name) => {
+            format!("Get expression {}.{}", stringify(&expr), name)
+        }
     }
 }

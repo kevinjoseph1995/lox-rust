@@ -677,13 +677,30 @@ impl Parser {
         }
     }
 
-    // call → primary ( "(" arguments? ")" )* ;
+    // call → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
     fn call(&mut self) -> Result<Box<Expression>, LoxError> {
-        let expr = self.primary()?;
-        if self.tokens[self.index].token_type == TokenType::LeftParen {
-            self.index += 1; // Move past the left parenthesis
-            let arguments = self.arguments()?;
-            return Ok(Box::new(Expression::Call(expr, arguments)));
+        let mut expr = self.primary()?;
+        loop {
+            if self.tokens[self.index].token_type == TokenType::LeftParen {
+                self.index += 1; // Move past the left parenthesis
+                let arguments = self.arguments()?;
+                expr = Box::new(Expression::Call(expr, arguments));
+            } else if self.tokens[self.index].token_type == TokenType::Dot {
+                self.index += 1; // Move past the dot operator
+                match &mut self.tokens[self.index].token_type {
+                    TokenType::Identifier(name) => {
+                        self.index += 1; // Move past the identifier
+                        expr = Box::new(Expression::Get(expr, std::mem::take(name)));
+                    }
+                    _ => {
+                        return Err(LoxError::ParserError(
+                            "Expected identifier after \".\" operator".to_string(),
+                        ));
+                    }
+                }
+            } else {
+                break;
+            }
         }
         return Ok(expr);
     }
@@ -818,6 +835,7 @@ pub enum Expression {
     Identifier(IdentifierId, String),
     Assignment(IdentifierId, String, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>), // Callee and list of arguments
+    Get(Box<Expression>, String), // The expression and the name of the value we want to "get" from the result of evaluating the corresponding expression
 }
 
 #[derive(Clone)]

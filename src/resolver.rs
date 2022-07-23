@@ -165,5 +165,9 @@ fn visit_expression(
             }
             Ok(())
         }
+        Expression::Get(expression, name) => {
+            visit_expression(expression, scopes, local_table)?;
+            Ok(())
+        }
     }
 }
