@@ -128,9 +128,12 @@ impl Interpreter {
                         Object::Callable(_) => Err(LoxError::RuntimeError(
                             "Cannot negate callable object".to_string(),
                         )),
-                        Object::Class(_) => Err(LoxError::RuntimeError(
-                            "Cannot negate class object".to_string(),
-                        )),
+                        Object::Class(_) => {
+                            Err(LoxError::RuntimeError("Cannot negate class".to_string()))
+                        }
+                        Object::Instance(_) => {
+                            Err(LoxError::RuntimeError("Cannot negate instance".to_string()))
+                        }
                     },
                     UnaryOperator::Not => match value {
                         Object::String(_) => Ok(Object::False),
@@ -142,6 +145,7 @@ impl Interpreter {
                             "Cannot call logical not on callable object".to_string(),
                         )),
                         Object::Class(_) => Ok(Object::False),
+                        Object::Instance(_) => Ok(Object::False),
                     },
                 }
             }
@@ -149,7 +153,7 @@ impl Interpreter {
                 let left_value = self.evaluate(lhs_expression)?;
                 let right_value = self.evaluate(rhs_expression)?;
                 match binary_operator {
-                    BinaryOperator::Equal => Ok(Object::from(left_value == right_value)),
+                    BinaryOperator::EqualEqual => Ok(Object::from(left_value == right_value)),
                     BinaryOperator::NotEqual => Ok(Object::from(left_value != right_value)),
                     BinaryOperator::Plus => match (left_value, right_value) {
                         (Object::String(str1), Object::String(str2)) => {
@@ -357,6 +361,9 @@ impl Interpreter {
                         self.current = prev;
                         return return_value;
                     }
+                    Object::Class(lox_class) => {
+                        return Ok(Object::Instance(lox_class.create_instance()));
+                    }
                     _ => {
                         return Err(LoxError::RuntimeError(format!(
                             "{} is not a callable type",
@@ -368,7 +375,15 @@ impl Interpreter {
             Expression::Get(expression, name) => {
                 let instance = self.evaluate(expression)?;
                 match instance {
-                    Object::Class(name) => todo!(),
+                    Object::Instance(class_instance) => match class_instance.properties.get(name) {
+                        Some(object) => return Ok(object.clone()),
+                        None => {
+                            return Err(LoxError::RuntimeError(format!(
+                                "Instance of class{} does not have property {}",
+                                class_instance.class_name, name
+                            )))
+                        }
+                    },
                     _ => {
                         return Err(LoxError::RuntimeError(
                             "Get expressions can only be evaluated on instances of classes"
@@ -376,7 +391,6 @@ impl Interpreter {
                         ))
                     }
                 }
-                todo!()
             }
         }
     }
@@ -534,10 +548,21 @@ pub enum Object {
     Nil,
     Callable(CallableObject),
     Class(LoxClass),
+    Instance(LoxInstance),
 }
 #[derive(Clone)]
-pub struct LoxClass {
+struct LoxClass {
     name: String,
+}
+
+impl LoxClass {
+    fn create_instance(&self) -> LoxInstance {
+        let properties: HashMap<String, Object> = HashMap::new(); // TODO get the properties set in the "init" function
+        LoxInstance {
+            class_name: self.name.clone(),
+            properties,
+        }
+    }
 }
 
 impl Debug for LoxClass {
@@ -547,7 +572,19 @@ impl Debug for LoxClass {
 }
 
 #[derive(Clone)]
-pub struct CallableObject {
+struct LoxInstance {
+    class_name: String,
+    properties: HashMap<String, Object>,
+}
+
+impl Debug for LoxInstance {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("").finish()
+    }
+}
+
+#[derive(Clone)]
+struct CallableObject {
     name: String,
     parameters: Vec<String>,
     function_block: Box<Statement>,
@@ -621,6 +658,9 @@ impl std::fmt::Display for Object {
             }
             Object::Class(class_object) => {
                 write!(f, "class<{}>", class_object.name)
+            }
+            Object::Instance(instance) => {
+                write!(f, "class<{}>instance", instance.class_name)
             }
         }
     }

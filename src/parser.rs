@@ -528,7 +528,7 @@ impl Parser {
                     let right_expr = self.comparison()?;
                     return Ok(Box::new(Expression::Binary(
                         expr,
-                        BinaryOperator::Equal,
+                        BinaryOperator::EqualEqual,
                         right_expr,
                     )));
                 }
@@ -855,7 +855,7 @@ impl Debug for UnaryOperator {
 
 #[derive(Clone)]
 pub enum BinaryOperator {
-    Equal,
+    EqualEqual,
     NotEqual,
     LessThan,
     LessThanEqual,
@@ -870,7 +870,7 @@ pub enum BinaryOperator {
 impl Debug for BinaryOperator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Equal => write!(f, "="),
+            Self::EqualEqual => write!(f, "="),
             Self::NotEqual => write!(f, "!="),
             Self::LessThan => write!(f, "<"),
             Self::LessThanEqual => write!(f, "<="),
