@@ -68,6 +68,14 @@ fn handle_statement(statement: &Statement, level: usize) {
         Statement::Println(expression) => {
             println!("Println statement: {}", stringify(&expression));
         }
+        Statement::ClassDeclaration(class_name, member_functions) => {
+            println!("class {} {{", class_name);
+            for func in member_functions {
+                handle_statement(func, level + 2);
+            }
+            print!("{:<width$}", "", width = level);
+            println!("}}");
+        }
     }
     print!("{:<width$}}}", "", width = level);
     println!("");

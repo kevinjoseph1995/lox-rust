@@ -103,6 +103,12 @@ fn visit_statement(
             }
             Ok(())
         }
+        Statement::ClassDeclaration(name, member_functions) => {
+            declare(scopes, name);
+            define(scopes, name);
+            // TODO: Resolve member functions
+            Ok(())
+        }
     }
 }
 

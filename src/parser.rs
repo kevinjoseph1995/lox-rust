@@ -62,7 +62,7 @@ impl Parser {
         Ok(program)
     }
 
-    // declaration  → funDecl | varDecl   | statement ;
+    // declaration  → classDecl | funDecl | varDecl   | statement ;
     fn declaration(&mut self) -> Result<Statement, LoxError> {
         match self.tokens[self.index].token_type {
             TokenType::Var => {
@@ -74,6 +74,44 @@ impl Parser {
                 // funDecl  → "fun" function ;
                 self.index += 1; // Move past the "fun"
                 self.function()
+            }
+            TokenType::Class => {
+                // classDecl      → "class" IDENTIFIER "{" function* "}" ;
+                self.index += 1; // Move past the "class" token
+                let class_name;
+                match &mut self.tokens[self.index].token_type {
+                    TokenType::Identifier(cls_name) => {
+                        self.index += 1; // Move past the identifier
+                        class_name = std::mem::take(cls_name);
+                    }
+                    _ => {
+                        return Err(LoxError::ParserError(
+                            "Expected identifier after class keyword".to_string(),
+                        ));
+                    }
+                }
+
+                if self.tokens[self.index].token_type != TokenType::LeftBrace {
+                    return Err(LoxError::ParserError(
+                        "Expected \"{{\" at the beginning of class declaration".to_string(),
+                    ));
+                }
+                self.index += 1; // move past the opening brace
+
+                let mut member_functions = Vec::new();
+                while self.tokens[self.index].token_type != TokenType::RightBrace {
+                    let member_function = self.function()?;
+                    member_functions.push(member_function);
+                }
+                if self.index == self.tokens.len() {
+                    return Err(LoxError::ParserError(
+                        "Expected \"}}\" at the end of class declaration".to_string(),
+                    ));
+                }
+
+                self.index += 1; // Move past the closing brace
+
+                Ok(Statement::ClassDeclaration(class_name, member_functions))
             }
             _ => self.statement(),
         }
@@ -767,6 +805,7 @@ pub enum Statement {
     If(Box<Expression>, Box<Statement>, Option<Box<Statement>>), // (Condition, Then-clause, Else-clause)
     While(Box<Expression>, Box<Statement>),                      // Expr condition, Stmt body
     Return(Option<Box<Expression>>),
+    ClassDeclaration(String, Vec<Statement>),
 }
 
 #[derive(Clone, Debug)]

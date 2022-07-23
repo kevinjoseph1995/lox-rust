@@ -77,7 +77,13 @@ impl Interpreter {
                 }
             }
             Statement::FunctionDeclaration(name, parameters, body) => {
-                self.add_callable_object(name, parameters, body);
+                let callable = CallableObject {
+                    name: name.clone(),
+                    parameters: parameters.clone(),
+                    function_block: body.clone(),
+                    parent_environment: self.current.clone(),
+                };
+                self.update_or_add(name, Object::Callable(callable));
             }
             Statement::Return(exp_opt) => {
                 if let Some(expression) = exp_opt {
@@ -90,6 +96,10 @@ impl Interpreter {
             Statement::Println(expression) => {
                 let result = self.evaluate(expression)?;
                 println!("{}", result)
+            }
+            Statement::ClassDeclaration(name, _member_functions) => {
+                let class_object = ClassObject { name: name.clone() };
+                self.update_or_add(name, Object::Class(class_object));
             }
         }
         Ok(())
@@ -118,6 +128,9 @@ impl Interpreter {
                         Object::Callable(_) => Err(LoxError::RuntimeError(
                             "Cannot negate callable object".to_string(),
                         )),
+                        Object::Class(_) => Err(LoxError::RuntimeError(
+                            "Cannot negate class object".to_string(),
+                        )),
                     },
                     UnaryOperator::Not => match value {
                         Object::String(_) => Ok(Object::False),
@@ -128,6 +141,7 @@ impl Interpreter {
                         Object::Callable(_) => Err(LoxError::RuntimeError(
                             "Cannot call logical not on callable object".to_string(),
                         )),
+                        Object::Class(_) => Ok(Object::False),
                     },
                 }
             }
@@ -496,21 +510,6 @@ impl Interpreter {
             .environment
             .update_or_add(name, value);
     }
-
-    fn add_callable_object(
-        &mut self,
-        name: &String,
-        parameters: &Vec<String>,
-        body: &Box<Statement>,
-    ) {
-        let callable = CallableObject {
-            name: name.clone(),
-            parameters: parameters.clone(),
-            function_block: body.clone(),
-            parent_environment: self.current.clone(),
-        };
-        self.update_or_add(name, Object::Callable(callable));
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -521,6 +520,17 @@ pub enum Object {
     False,
     Nil,
     Callable(CallableObject),
+    Class(ClassObject),
+}
+#[derive(Clone)]
+pub struct ClassObject {
+    name: String,
+}
+
+impl Debug for ClassObject {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple(&self.name).finish()
+    }
 }
 
 #[derive(Clone)]
@@ -533,8 +543,7 @@ pub struct CallableObject {
 
 impl Debug for CallableObject {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("")
-            .field(&self.name)
+        f.debug_tuple(&self.name)
             .field(&self.parameters)
             .field(&self.function_block)
             .finish()
@@ -596,6 +605,9 @@ impl std::fmt::Display for Object {
             Object::Callable(callable) => {
                 write!(f, "fn <{}>", &callable.name)
                 // TODO expand a little bit more
+            }
+            Object::Class(class_object) => {
+                write!(f, "class<{}>", class_object.name)
             }
         }
     }
