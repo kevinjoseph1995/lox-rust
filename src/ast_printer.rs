@@ -124,5 +124,16 @@ fn stringify(expression: &Expression) -> String {
         Expression::Get(expr, name) => {
             format!("Get expression {}.{}", stringify(&expr), name)
         }
+        Expression::Set(lhs_expr, prop_name, rhs_expr) => {
+            format!(
+                "Set expression LHS:{}.{}=RHS{}",
+                stringify(&lhs_expr),
+                prop_name,
+                stringify(&rhs_expr)
+            )
+        }
+        Expression::This(id) => {
+            format!("This(id={})", id)
+        }
     }
 }

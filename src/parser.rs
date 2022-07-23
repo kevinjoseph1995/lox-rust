@@ -100,6 +100,13 @@ impl Parser {
 
                 let mut member_functions = Vec::new();
                 while self.tokens[self.index].token_type != TokenType::RightBrace {
+                    if self.tokens[self.index].token_type != TokenType::Fun {
+                        return Err(LoxError::ParserError(
+                            "Only function declarations are allowed inside the class block"
+                                .to_string(),
+                        ));
+                    }
+                    self.index += 1; // Move past the fun keyword
                     let member_function = self.function()?;
                     member_functions.push(member_function);
                 }
@@ -438,7 +445,7 @@ impl Parser {
     /*
         Expression grammar for Lox from https://craftinginterpreters.com/parsing-expressions.html
         expression     → assignment ;
-        assignment     → IDENTIFIER "=" assignment
+        assignment     → ( call "." )? IDENTIFIER "=" assignment
                         | logic_or ;
         logic_or       → logic_and ( "or" logic_and )* ;
         logic_and      → equality ( "and" equality )* ;
@@ -449,7 +456,7 @@ impl Parser {
         unary          → ( "!" | "-" ) unary | call ;
         call           → primary ( "(" arguments? ")" )* ;
         arguments      → expression ( "," expression )* ;
-        primary        → NUMBER | STRING | "true" | "false" | "nil"
+        primary        → NUMBER | STRING | "true" | "false" | "nil" | "this"
                     | "(" expression ")" ;
     */
 
@@ -457,25 +464,37 @@ impl Parser {
         return self.assignment();
     }
 
-    // assignment     → IDENTIFIER "=" assignment | equality ;
+    //assignment     → ( call "." )? IDENTIFIER "=" assignment
+    //               | logic_or ;
     fn assignment(&mut self) -> Result<Box<Expression>, LoxError> {
         let mut lhs = self.logic_or()?;
 
         if self.tokens[self.index].token_type == TokenType::Equal {
             self.index += 1; // Move past the "="
             let value = self.assignment()?;
-            // Validate that the LHS is an expression that we can assign to. For now only variable identifiers are assignable
-            if let Expression::Identifier(id, name) = lhs.as_mut() {
-                return Ok(Box::new(Expression::Assignment(
-                    id.clone(),
-                    std::mem::take(name),
-                    value,
-                )));
+            // Validate that the LHS is an expression that we can assign to.
+            match lhs.as_mut() {
+                Expression::Identifier(id, name) => {
+                    return Ok(Box::new(Expression::Assignment(
+                        id.clone(),
+                        std::mem::take(name),
+                        value,
+                    )));
+                }
+                Expression::Get(lhs_expr, name) => {
+                    return Ok(Box::new(Expression::Set(
+                        lhs_expr.clone(), // TODO: This is an unnecessary heap alloc, clean this up
+                        std::mem::take(name),
+                        value,
+                    )));
+                }
+                _ => {
+                    // The LHS wasn't an L-value, returning error here, maybe don't?
+                    return Err(LoxError::ParserError(
+                        "Expected L-value for assignment".to_string(),
+                    ));
+                }
             }
-            // The LHS wasn't an L-value, returning error here, maybe don't?
-            return Err(LoxError::ParserError(
-                "Expected L-value for assignment".to_string(),
-            ));
         }
 
         return Ok(lhs);
@@ -789,6 +808,12 @@ impl Parser {
                     std::mem::take(identifier_name),
                 )))
             }
+            TokenType::This => {
+                self.index += 1;
+                let id = self.current_identifier_id;
+                self.current_identifier_id += 1;
+                Ok(Box::new(Expression::This(id)))
+            }
             _ => Err(LoxError::ParserError(format!(
                 "Parser error, current index:{}, line number:{}",
                 self.index, &self.tokens[self.index].line_number
@@ -836,6 +861,8 @@ pub enum Expression {
     Assignment(IdentifierId, String, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>), // Callee and list of arguments
     Get(Box<Expression>, String), // The expression and the name of the value we want to "get" from the result of evaluating the corresponding expression
+    Set(Box<Expression>, String, Box<Expression>),
+    This(IdentifierId),
 }
 
 #[derive(Clone)]

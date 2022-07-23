@@ -106,7 +106,11 @@ fn visit_statement(
         Statement::ClassDeclaration(name, member_functions) => {
             declare(scopes, name);
             define(scopes, name);
-            // TODO: Resolve member functions
+            scopes.push(HashMap::from([("this".to_string(), true)]));
+            for stmt in member_functions {
+                visit_statement(stmt, scopes, local_table)?;
+            }
+            scopes.pop();
             Ok(())
         }
     }
@@ -167,6 +171,26 @@ fn visit_expression(
         }
         Expression::Get(expression, name) => {
             visit_expression(expression, scopes, local_table)?;
+            Ok(())
+        }
+        Expression::Set(lhs, _, rhs) => {
+            visit_expression(lhs, scopes, local_table)?;
+            visit_expression(rhs, scopes, local_table)?;
+            Ok(())
+        }
+        Expression::This(id) => {
+            if scopes.is_empty() {
+                return Err(LoxError::ParserError(
+                    "Found this in global scope".to_string(),
+                ));
+            }
+            for (distance, scope) in scopes.iter().rev().enumerate() {
+                if scope.contains_key("this") {
+                    local_table[*id as usize] = Some(distance);
+                    break;
+                }
+            }
+
             Ok(())
         }
     }

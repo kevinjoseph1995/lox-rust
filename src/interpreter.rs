@@ -98,7 +98,29 @@ impl Interpreter {
                 println!("{}", result)
             }
             Statement::ClassDeclaration(name, _member_functions) => {
-                let class_object = LoxClass { name: name.clone() };
+                let mut methods: HashMap<String, CallableObject> = HashMap::new();
+                for stmt in _member_functions {
+                    match stmt {
+                        Statement::FunctionDeclaration(name, params, body) => {
+                            let callable = CallableObject {
+                                name: name.clone(),
+                                parameters: params.clone(),
+                                function_block: body.clone(),
+                                parent_environment: self.current.clone(),
+                            };
+                            methods.insert(name.clone(), callable);
+                        }
+                        _ => {
+                            return Err(LoxError::RuntimeError(
+                                "Only function declarations can be found in class body".to_string(),
+                            ))
+                        }
+                    }
+                }
+                let class_object = LoxClass {
+                    name: name.clone(),
+                    methods,
+                };
                 self.update_or_add(name, Object::Class(class_object));
             }
         }
@@ -375,15 +397,19 @@ impl Interpreter {
             Expression::Get(expression, name) => {
                 let instance = self.evaluate(expression)?;
                 match instance {
-                    Object::Instance(class_instance) => match class_instance.properties.get(name) {
-                        Some(object) => return Ok(object.clone()),
-                        None => {
-                            return Err(LoxError::RuntimeError(format!(
-                                "Instance of class{} does not have property {}",
-                                class_instance.class_name, name
-                            )))
+                    Object::Instance(class_instance) => {
+                        let class_instance = class_instance.borrow();
+                        match class_instance.properties.get(name) {
+                            Some(object) => return Ok(object.clone()),
+                            None => {
+                                // Did not find property, check if the corresponding class has a method with that name
+                                return Err(LoxError::RuntimeError(format!(
+                                    "Instance of class{} does not have property {}",
+                                    class_instance.class_name, name
+                                )));
+                            }
                         }
-                    },
+                    }
                     _ => {
                         return Err(LoxError::RuntimeError(
                             "Get expressions can only be evaluated on instances of classes"
@@ -392,6 +418,23 @@ impl Interpreter {
                     }
                 }
             }
+            Expression::Set(lhs, name, rhs) => {
+                let mut lhs_object = self.evaluate(lhs)?;
+                match &mut lhs_object {
+                    Object::Instance(lox_instance) => {
+                        let rhs_value = self.evaluate(rhs)?;
+                        lox_instance
+                            .borrow_mut()
+                            .properties
+                            .insert(name.clone(), rhs_value);
+                        Ok(Object::Nil)
+                    }
+                    _ => Err(LoxError::RuntimeError(
+                        "LHS is not an assignable type".to_string(),
+                    )),
+                }
+            }
+            Expression::This(_) => todo!(),
         }
     }
     fn print_environment_node_helper(&self, node: Weak<RefCell<EnvironmentNode>>, indent: usize) {
@@ -548,20 +591,21 @@ pub enum Object {
     Nil,
     Callable(CallableObject),
     Class(LoxClass),
-    Instance(LoxInstance),
+    Instance(Rc<RefCell<LoxInstance>>),
 }
 #[derive(Clone)]
-struct LoxClass {
+pub struct LoxClass {
     name: String,
+    methods: HashMap<String, CallableObject>,
 }
 
 impl LoxClass {
-    fn create_instance(&self) -> LoxInstance {
+    fn create_instance(&self) -> Rc<RefCell<LoxInstance>> {
         let properties: HashMap<String, Object> = HashMap::new(); // TODO get the properties set in the "init" function
-        LoxInstance {
+        Rc::new(RefCell::new(LoxInstance {
             class_name: self.name.clone(),
             properties,
-        }
+        }))
     }
 }
 
@@ -572,7 +616,7 @@ impl Debug for LoxClass {
 }
 
 #[derive(Clone)]
-struct LoxInstance {
+pub struct LoxInstance {
     class_name: String,
     properties: HashMap<String, Object>,
 }
@@ -584,11 +628,17 @@ impl Debug for LoxInstance {
 }
 
 #[derive(Clone)]
-struct CallableObject {
+pub struct CallableObject {
     name: String,
     parameters: Vec<String>,
     function_block: Box<Statement>,
     parent_environment: Weak<RefCell<EnvironmentNode>>,
+}
+
+#[derive(Clone)]
+pub enum CallableType {
+    Function,
+    Method,
 }
 
 impl Debug for CallableObject {
@@ -660,7 +710,12 @@ impl std::fmt::Display for Object {
                 write!(f, "class<{}>", class_object.name)
             }
             Object::Instance(instance) => {
-                write!(f, "class<{}>instance", instance.class_name)
+                let instance = instance.borrow();
+                write!(f, "class<{}>instance", instance.class_name)?;
+                for (prop, value) in &instance.properties {
+                    write!(f, "\n \"{}\" : {}", prop, value)?;
+                }
+                Ok(())
             }
         }
     }
