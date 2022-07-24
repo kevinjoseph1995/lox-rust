@@ -81,7 +81,7 @@ impl Interpreter {
                     name: name.clone(),
                     parameters: parameters.clone(),
                     function_block: body.clone(),
-                    parent_environment: self.current.clone(),
+                    parent_environment: self.current.upgrade().unwrap(),
                 };
                 self.update_or_add(name, Object::Callable(callable));
             }
@@ -106,7 +106,7 @@ impl Interpreter {
                                 name: name.clone(),
                                 parameters: params.clone(),
                                 function_block: body.clone(),
-                                parent_environment: self.current.clone(),
+                                parent_environment: self.current.upgrade().unwrap(),
                             };
                             methods.insert(name.clone(), callable);
                         }
@@ -121,7 +121,7 @@ impl Interpreter {
                     name: name.clone(),
                     methods,
                 };
-                self.update_or_add(name, Object::Class(class_object));
+                self.update_or_add(name, Object::Class(Rc::new(class_object)));
             }
         }
         Ok(())
@@ -364,8 +364,7 @@ impl Interpreter {
                             arg_values.push(value);
                         }
                         let prev = self.current.clone();
-                        self.current =
-                            add_child(&mut callable_object.parent_environment.upgrade().unwrap());
+                        self.current = add_child(&mut callable_object.parent_environment);
                         for (param, arg_value) in callable_object.parameters.iter().zip(arg_values)
                         {
                             self.update_or_add(param, arg_value);
@@ -384,7 +383,7 @@ impl Interpreter {
                         return return_value;
                     }
                     Object::Class(lox_class) => {
-                        return Ok(Object::Instance(lox_class.create_instance()));
+                        return Ok(Object::Instance(create_instance(lox_class.clone())));
                     }
                     _ => {
                         return Err(LoxError::RuntimeError(format!(
@@ -394,18 +393,39 @@ impl Interpreter {
                     }
                 }
             }
-            Expression::Get(expression, name) => {
+            Expression::Get(expression, property_name) => {
                 let instance = self.evaluate(expression)?;
                 match instance {
                     Object::Instance(class_instance) => {
+                        let class_instance_ref_ptr = class_instance.clone();
                         let class_instance = class_instance.borrow();
-                        match class_instance.properties.get(name) {
+                        match class_instance.properties.get(property_name) {
                             Some(object) => return Ok(object.clone()),
                             None => {
                                 // Did not find property, check if the corresponding class has a method with that name
+                                let class = class_instance.class.upgrade().unwrap();
+                                let function = class.as_ref().methods.get(property_name);
+                                match function {
+                                    Some(callable_object) => {
+                                        let mut node = EnvironmentNode::new();
+                                        node.environment.update_or_add(
+                                            &"this".to_string(),
+                                            Object::Instance(class_instance_ref_ptr),
+                                        );
+                                        node.parent = Some(Rc::downgrade(
+                                            &callable_object.parent_environment.clone(),
+                                        ));
+                                        let node = Rc::new(RefCell::new(node));
+                                        let mut callable_object = callable_object.clone();
+                                        callable_object.parent_environment = node;
+                                        return Ok(Object::Callable(callable_object));
+                                    }
+                                    None => {}
+                                }
                                 return Err(LoxError::RuntimeError(format!(
-                                    "Instance of class{} does not have property {}",
-                                    class_instance.class_name, name
+                                    "Instance of {} does not have property {}",
+                                    (*class).name,
+                                    property_name
                                 )));
                             }
                         }
@@ -434,7 +454,16 @@ impl Interpreter {
                     )),
                 }
             }
-            Expression::This(_) => todo!(),
+            Expression::This(id) => {
+                if let Some(distance) = self.local_variable_resolution_table[*id as usize] {
+                    if let Some(value) =
+                        self.lookup_at_distance(&"this".to_string(), distance.clone())
+                    {
+                        return Ok(value.clone());
+                    }
+                }
+                return Err(LoxError::InternalError(format!("Could not find \"this\"")));
+            }
         }
     }
     fn print_environment_node_helper(&self, node: Weak<RefCell<EnvironmentNode>>, indent: usize) {
@@ -476,6 +505,7 @@ impl Interpreter {
     }
 
     fn lookup_at_distance(&self, name: &String, distance: usize) -> Option<Object> {
+        println!("Distance {}", distance);
         let mut current = self.current.clone();
         for _ in 0..distance {
             let rc = current.upgrade().unwrap();
@@ -590,7 +620,7 @@ pub enum Object {
     False,
     Nil,
     Callable(CallableObject),
-    Class(LoxClass),
+    Class(Rc<LoxClass>),
     Instance(Rc<RefCell<LoxInstance>>),
 }
 #[derive(Clone)]
@@ -599,14 +629,12 @@ pub struct LoxClass {
     methods: HashMap<String, CallableObject>,
 }
 
-impl LoxClass {
-    fn create_instance(&self) -> Rc<RefCell<LoxInstance>> {
-        let properties: HashMap<String, Object> = HashMap::new(); // TODO get the properties set in the "init" function
-        Rc::new(RefCell::new(LoxInstance {
-            class_name: self.name.clone(),
-            properties,
-        }))
-    }
+fn create_instance(class: Rc<LoxClass>) -> Rc<RefCell<LoxInstance>> {
+    let properties: HashMap<String, Object> = HashMap::new(); // TODO get the properties set in the "init" function
+    Rc::new(RefCell::new(LoxInstance {
+        properties,
+        class: Rc::downgrade(&class),
+    }))
 }
 
 impl Debug for LoxClass {
@@ -617,8 +645,8 @@ impl Debug for LoxClass {
 
 #[derive(Clone)]
 pub struct LoxInstance {
-    class_name: String,
     properties: HashMap<String, Object>,
+    class: Weak<LoxClass>,
 }
 
 impl Debug for LoxInstance {
@@ -632,13 +660,7 @@ pub struct CallableObject {
     name: String,
     parameters: Vec<String>,
     function_block: Box<Statement>,
-    parent_environment: Weak<RefCell<EnvironmentNode>>,
-}
-
-#[derive(Clone)]
-pub enum CallableType {
-    Function,
-    Method,
+    parent_environment: Rc<RefCell<EnvironmentNode>>,
 }
 
 impl Debug for CallableObject {
@@ -707,11 +729,12 @@ impl std::fmt::Display for Object {
                 // TODO expand a little bit more
             }
             Object::Class(class_object) => {
-                write!(f, "class<{}>", class_object.name)
+                write!(f, "class<{}>", (*class_object).name)
             }
             Object::Instance(instance) => {
                 let instance = instance.borrow();
-                write!(f, "class<{}>instance", instance.class_name)?;
+                let class = instance.class.upgrade().unwrap();
+                write!(f, "class<{}>instance", class.name)?;
                 for (prop, value) in &instance.properties {
                     write!(f, "\n \"{}\" : {}", prop, value)?;
                 }

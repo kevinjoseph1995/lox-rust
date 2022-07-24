@@ -169,7 +169,7 @@ fn visit_expression(
             }
             Ok(())
         }
-        Expression::Get(expression, name) => {
+        Expression::Get(expression, _name) => {
             visit_expression(expression, scopes, local_table)?;
             Ok(())
         }
