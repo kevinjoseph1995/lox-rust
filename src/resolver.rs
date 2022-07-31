@@ -106,9 +106,27 @@ fn visit_statement(
         Statement::ClassDeclaration(name, member_functions) => {
             declare(scopes, name);
             define(scopes, name);
-            scopes.push(HashMap::from([("this".to_string(), true)]));
             for stmt in member_functions {
-                visit_statement(stmt, scopes, local_table)?;
+                match stmt {
+                    Statement::FunctionDeclaration(function_name, parameters, body) => {
+                        scopes.push(HashMap::new());
+                        scopes.push(HashMap::from([(function_name.clone(), true)]));
+                        scopes.push(HashMap::from([("this".to_string(), true)]));
+                        for param in parameters {
+                            declare(scopes, param);
+                            define(scopes, param);
+                        }
+                        visit_statement(body.as_ref(), scopes, local_table)?;
+                        scopes.pop();
+                        scopes.pop();
+                    }
+                    _ => {
+                        return Err(LoxError::ParserError(
+                            "Only functional declarations are allowed inside class block"
+                                .to_string(),
+                        ))
+                    }
+                }
             }
             scopes.pop();
             Ok(())

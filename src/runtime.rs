@@ -48,7 +48,25 @@ pub struct CallableObject {
     pub name: String,
     pub parameters: Vec<String>,
     pub function_block: Box<Statement>,
-    pub parent_environment: Rc<RefCell<EnvironmentNode>>,
+    pub environment: Rc<RefCell<EnvironmentNode>>,
+}
+
+impl CallableObject {
+    pub fn new(
+        name: &String,
+        parameters: &Vec<String>,
+        function_block: &Statement,
+        parent_environment: &Weak<RefCell<EnvironmentNode>>,
+    ) -> Self {
+        let mut env = EnvironmentNode::new();
+        env.parent = Some(parent_environment.clone());
+        CallableObject {
+            name: name.clone(),
+            parameters: parameters.clone(),
+            function_block: Box::new(function_block.clone()),
+            environment: Rc::new(RefCell::new(env)),
+        }
+    }
 }
 
 impl Debug for CallableObject {
@@ -178,12 +196,12 @@ impl Environment {
         return None;
     }
 
-    pub fn update_or_add(&mut self, name: &String, value: Object) {
+    pub fn update_or_add(&mut self, name: &str, value: Object) {
         let lookup_result = self.variables.get_mut(name);
         if let Some(object) = lookup_result {
             *object = value;
         } else {
-            self.variables.insert(name.clone(), value);
+            self.variables.insert(name.to_string(), value);
         }
     }
 }

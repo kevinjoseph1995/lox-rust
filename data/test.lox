@@ -175,3 +175,58 @@ println "Chaining function calls";
     }
     A()()();
 }
+///////////////////////////////////////////////////////////////
+println "Class support";
+{
+class Thing {
+fun getCallback() {
+  fun localFunction() {
+    println this;
+  }
+
+  return localFunction;
+}
+}
+var callback = Thing().getCallback();
+callback();
+}
+
+{
+  class Egotist {
+    fun speak() {
+      println this;
+    }
+  }
+
+  var method = Egotist().speak;
+  method();
+}
+
+{
+  class Class {
+    fun method() {
+      println this;
+    }
+  }
+
+  var instance1 = Class();
+  instance1.prop = "instance1";
+  var instance2 = Class();
+
+  instance2.method = instance1.method;
+  instance2.method(); // Calls instance1's method
+}
+
+{
+  class Cake {
+    fun taste() {
+      var adjective = "delicious";
+      println "The " + this.flavor + " cake is " + adjective + "!";
+    }
+  }
+
+  var cake = Cake();
+  cake.flavor = "German chocolate";
+  cake.taste(); // Prints "The German chocolate cake is delicious!".
+}
+///////////////////////////////////////////////////////////////

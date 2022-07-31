@@ -614,26 +614,18 @@ impl Parser {
     term → factor ( ( "-" | "+" ) factor )*
     */
     fn term(&mut self) -> Result<Box<Expression>, LoxError> {
-        let expr = self.factor()?;
+        let mut expr = self.factor()?;
         loop {
             match self.tokens[self.index].token_type {
                 TokenType::Minus => {
                     self.index += 1;
                     let right_expr = self.factor()?;
-                    return Ok(Box::new(Expression::Binary(
-                        expr,
-                        BinaryOperator::Minus,
-                        right_expr,
-                    )));
+                    expr = Box::new(Expression::Binary(expr, BinaryOperator::Minus, right_expr));
                 }
                 TokenType::Plus => {
                     self.index += 1;
                     let right_expr = self.factor()?;
-                    return Ok(Box::new(Expression::Binary(
-                        expr,
-                        BinaryOperator::Plus,
-                        right_expr,
-                    )));
+                    expr = Box::new(Expression::Binary(expr, BinaryOperator::Plus, right_expr));
                 }
                 _ => {
                     break;
@@ -647,26 +639,22 @@ impl Parser {
      * factor → unary ( ( "/" | "*" ) unary )*
      */
     fn factor(&mut self) -> Result<Box<Expression>, LoxError> {
-        let expr = self.unary()?;
+        let mut expr = self.unary()?;
         loop {
             match self.tokens[self.index].token_type {
                 TokenType::Slash => {
                     self.index += 1;
                     let right_expr = self.unary()?;
-                    return Ok(Box::new(Expression::Binary(
-                        expr,
-                        BinaryOperator::Divide,
-                        right_expr,
-                    )));
+                    expr = Box::new(Expression::Binary(expr, BinaryOperator::Divide, right_expr));
                 }
                 TokenType::Star => {
                     self.index += 1;
                     let right_expr = self.unary()?;
-                    return Ok(Box::new(Expression::Binary(
+                    expr = Box::new(Expression::Binary(
                         expr,
                         BinaryOperator::Multiply,
                         right_expr,
-                    )));
+                    ));
                 }
                 _ => {
                     break;

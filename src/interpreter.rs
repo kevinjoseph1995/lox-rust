@@ -82,12 +82,7 @@ impl Interpreter {
                 }
             }
             Statement::FunctionDeclaration(name, parameters, body) => {
-                let callable = CallableObject {
-                    name: name.clone(),
-                    parameters: parameters.clone(),
-                    function_block: body.clone(),
-                    parent_environment: self.current.upgrade().unwrap(),
-                };
+                let callable = CallableObject::new(name, parameters, &body, &self.current.clone());
                 self.update_or_add(name, Object::Callable(callable));
             }
             Statement::Return(exp_opt) => {
@@ -107,12 +102,8 @@ impl Interpreter {
                 for stmt in _member_functions {
                     match stmt {
                         Statement::FunctionDeclaration(name, params, body) => {
-                            let callable = CallableObject {
-                                name: name.clone(),
-                                parameters: params.clone(),
-                                function_block: body.clone(),
-                                parent_environment: self.current.upgrade().unwrap(),
-                            };
+                            let callable =
+                                CallableObject::new(name, params, &body, &self.current.clone());
                             methods.insert(name.clone(), callable);
                         }
                         _ => {
@@ -369,7 +360,7 @@ impl Interpreter {
                             arg_values.push(value);
                         }
                         let prev = self.current.clone();
-                        self.current = add_child(&mut callable_object.parent_environment);
+                        self.current = Rc::downgrade(&callable_object.environment);
                         for (param, arg_value) in callable_object.parameters.iter().zip(arg_values)
                         {
                             self.update_or_add(param, arg_value);
@@ -411,19 +402,18 @@ impl Interpreter {
                                 let class = class_instance.class.upgrade().unwrap();
                                 let function = class.as_ref().methods.get(property_name);
                                 match function {
-                                    Some(callable_object) => {
-                                        let mut node = EnvironmentNode::new();
-                                        node.environment.update_or_add(
-                                            &"this".to_string(),
-                                            Object::Instance(class_instance_ref_ptr),
-                                        );
-                                        node.parent = Some(Rc::downgrade(
-                                            &callable_object.parent_environment.clone(),
-                                        ));
-                                        let node = Rc::new(RefCell::new(node));
-                                        let mut callable_object = callable_object.clone();
-                                        callable_object.parent_environment = node;
-                                        return Ok(Object::Callable(callable_object));
+                                    Some(class_callable_object) => {
+                                        let instance_callable_object =
+                                            class_callable_object.clone();
+                                        instance_callable_object
+                                            .environment
+                                            .borrow_mut()
+                                            .environment
+                                            .update_or_add(
+                                                "this",
+                                                Object::Instance(class_instance_ref_ptr),
+                                            );
+                                        return Ok(Object::Callable(instance_callable_object));
                                     }
                                     None => {}
                                 }
