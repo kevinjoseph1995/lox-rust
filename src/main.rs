@@ -8,6 +8,7 @@ mod error;
 mod interpreter;
 mod parser;
 mod resolver;
+mod runtime;
 mod scanner;
 mod tokens;
 

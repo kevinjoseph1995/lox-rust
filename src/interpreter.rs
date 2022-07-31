@@ -1,15 +1,20 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::Debug;
-use std::fmt::Formatter;
 use std::rc::{Rc, Weak};
 
 use crate::error::LoxError;
 use crate::parser::{
-    BinaryOperator, Expression, LiteralType, LogicalOperator, Program, Statement, UnaryOperator,
+    BinaryOperator, Expression, LogicalOperator, Program, Statement, UnaryOperator,
 };
 use crate::resolver;
 use crate::resolver::DistanceTable;
+use crate::runtime::add_child;
+use crate::runtime::create_instance;
+use crate::runtime::is_true_value;
+use crate::runtime::CallableObject;
+use crate::runtime::EnvironmentNode;
+use crate::runtime::LoxClass;
+use crate::runtime::Object;
 
 pub struct Interpreter {
     global_environment: Rc<RefCell<EnvironmentNode>>, // Root of our environment tree. Keeps all the other nodes alive
@@ -505,7 +510,6 @@ impl Interpreter {
     }
 
     fn lookup_at_distance(&self, name: &String, distance: usize) -> Option<Object> {
-        println!("Distance {}", distance);
         let mut current = self.current.clone();
         for _ in 0..distance {
             let rc = current.upgrade().unwrap();
@@ -610,202 +614,4 @@ impl Interpreter {
             .environment
             .update_or_add(name, value);
     }
-}
-
-#[derive(Clone, Debug)]
-pub enum Object {
-    Number(f64),
-    String(String),
-    True,
-    False,
-    Nil,
-    Callable(CallableObject),
-    Class(Rc<LoxClass>),
-    Instance(Rc<RefCell<LoxInstance>>),
-}
-#[derive(Clone)]
-pub struct LoxClass {
-    name: String,
-    methods: HashMap<String, CallableObject>,
-}
-
-fn create_instance(class: Rc<LoxClass>) -> Rc<RefCell<LoxInstance>> {
-    let properties: HashMap<String, Object> = HashMap::new(); // TODO get the properties set in the "init" function
-    Rc::new(RefCell::new(LoxInstance {
-        properties,
-        class: Rc::downgrade(&class),
-    }))
-}
-
-impl Debug for LoxClass {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple(&self.name).finish()
-    }
-}
-
-#[derive(Clone)]
-pub struct LoxInstance {
-    properties: HashMap<String, Object>,
-    class: Weak<LoxClass>,
-}
-
-impl Debug for LoxInstance {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("").finish()
-    }
-}
-
-#[derive(Clone)]
-pub struct CallableObject {
-    name: String,
-    parameters: Vec<String>,
-    function_block: Box<Statement>,
-    parent_environment: Rc<RefCell<EnvironmentNode>>,
-}
-
-impl Debug for CallableObject {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple(&self.name)
-            .field(&self.parameters)
-            .field(&self.function_block)
-            .finish()
-    }
-}
-
-impl From<LiteralType> for Object {
-    fn from(literal: LiteralType) -> Self {
-        match literal {
-            LiteralType::Number(number) => Object::Number(number),
-            LiteralType::String(string) => Object::String(string),
-            LiteralType::True => Object::True,
-            LiteralType::False => Object::False,
-            LiteralType::Nil => Object::Nil,
-        }
-    }
-}
-
-impl From<bool> for Object {
-    fn from(v: bool) -> Object {
-        if v {
-            Object::True
-        } else {
-            Object::False
-        }
-    }
-}
-
-impl PartialEq for Object {
-    fn eq(&self, other: &Self) -> bool {
-        if let (Object::Number(value1), Object::Number(value2)) = (&self, &other) {
-            return value1 == value2;
-        }
-        if let (Object::String(value1), Object::String(value2)) = (&self, &other) {
-            return value1 == value2;
-        }
-        return self == other;
-    }
-}
-
-impl std::fmt::Display for Object {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Object::Number(number) => {
-                write!(f, "{}", number)
-            }
-            Object::String(string) => {
-                write!(f, "{}", string)
-            }
-            Object::True => {
-                write!(f, "True")
-            }
-            Object::False => {
-                write!(f, "False")
-            }
-            Object::Nil => {
-                write!(f, "Nil")
-            }
-            Object::Callable(callable) => {
-                write!(f, "fn <{}>", &callable.name)
-                // TODO expand a little bit more
-            }
-            Object::Class(class_object) => {
-                write!(f, "class<{}>", (*class_object).name)
-            }
-            Object::Instance(instance) => {
-                let instance = instance.borrow();
-                let class = instance.class.upgrade().unwrap();
-                write!(f, "class<{}>instance", class.name)?;
-                for (prop, value) in &instance.properties {
-                    write!(f, "\n \"{}\" : {}", prop, value)?;
-                }
-                Ok(())
-            }
-        }
-    }
-}
-
-fn is_true_value(value: &Object) -> bool {
-    match value {
-        Object::True => true,
-        Object::Number(num) => {
-            if num.clone() != 0.0f64 {
-                return true;
-            }
-            false
-        }
-        Object::String(_) => true,
-        _ => false,
-    }
-}
-
-struct Environment {
-    variables: HashMap<String, Object>,
-}
-
-impl Environment {
-    fn new() -> Self {
-        Environment {
-            variables: HashMap::new(),
-        }
-    }
-
-    fn lookup(&self, name: &String) -> Option<&Object> {
-        let lookup_result = self.variables.get(name);
-        if let Some(value) = lookup_result {
-            return Some(&value);
-        }
-        return None;
-    }
-
-    fn update_or_add(&mut self, name: &String, value: Object) {
-        let lookup_result = self.variables.get_mut(name);
-        if let Some(object) = lookup_result {
-            *object = value;
-        } else {
-            self.variables.insert(name.clone(), value);
-        }
-    }
-}
-
-struct EnvironmentNode {
-    environment: Environment,
-    parent: Option<Weak<RefCell<EnvironmentNode>>>,
-    children: Vec<Rc<RefCell<EnvironmentNode>>>,
-}
-
-impl EnvironmentNode {
-    fn new() -> Self {
-        Self {
-            environment: Environment::new(),
-            parent: None,
-            children: Vec::new(),
-        }
-    }
-}
-
-fn add_child(parent: &mut Rc<RefCell<EnvironmentNode>>) -> Weak<RefCell<EnvironmentNode>> {
-    let child = Rc::new(RefCell::new(EnvironmentNode::new()));
-    (*child).borrow_mut().parent = Some(Rc::downgrade(parent));
-    parent.as_ref().borrow_mut().children.push(child.clone());
-    return Rc::downgrade(&child);
 }
