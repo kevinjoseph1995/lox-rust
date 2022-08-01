@@ -229,4 +229,15 @@ callback();
   cake.flavor = "German chocolate";
   cake.taste(); // Prints "The German chocolate cake is delicious!".
 }
+{
+    class Class {
+        fun init() {
+            this.prop1 = "prop1 value";
+            println "Hello world";
+        }
+    }
+
+    var inst1 = Class();
+    println inst1;
+}
 ///////////////////////////////////////////////////////////////

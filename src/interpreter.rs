@@ -379,7 +379,57 @@ impl Interpreter {
                         return return_value;
                     }
                     Object::Class(lox_class) => {
-                        return Ok(Object::Instance(create_instance(lox_class.clone())));
+                        let new_instance = create_instance(lox_class.clone());
+                        match lox_class.methods.get("init") {
+                            Some(class_init_callable) => {
+                                let instance_init_callable = class_init_callable.clone();
+                                instance_init_callable
+                                    .environment
+                                    .borrow_mut()
+                                    .environment
+                                    .update_or_add("this", Object::Instance(new_instance.clone()));
+                                {
+                                    // TODO: Clean me up, reuse Expression::Call code here. It does the same thing
+                                    if instance_init_callable.parameters.len() != arguments.len() {
+                                        // Check arity
+                                        return Err(LoxError::RuntimeError(format!(
+                                            "{} expects {} argument/s, found {}",
+                                            &instance_init_callable.name,
+                                            instance_init_callable.parameters.len(),
+                                            arguments.len()
+                                        )));
+                                    }
+                                    let mut arg_values = Vec::new();
+                                    for arg_expr in arguments {
+                                        let value = self.evaluate(arg_expr)?;
+                                        arg_values.push(value);
+                                    }
+                                    let prev = self.current.clone();
+                                    self.current =
+                                        Rc::downgrade(&instance_init_callable.environment);
+                                    for (param, arg_value) in
+                                        instance_init_callable.parameters.iter().zip(arg_values)
+                                    {
+                                        self.update_or_add(param, arg_value);
+                                    }
+                                    let _return_value: Result<Object, LoxError>; // TODO: init shouldn't have RV's handle error cases
+                                    match self
+                                        .handle_statement(&instance_init_callable.function_block)
+                                    {
+                                        Ok(_) => _return_value = Ok(Object::Nil),
+                                        Err(err) => match err {
+                                            LoxError::Return(value) => {
+                                                _return_value = Ok(value);
+                                            }
+                                            _ => return Err(err),
+                                        },
+                                    }
+                                    self.current = prev;
+                                }
+                            }
+                            None => {}
+                        }
+                        return Ok(Object::Instance(new_instance));
                     }
                     _ => {
                         return Err(LoxError::RuntimeError(format!(
