@@ -345,38 +345,7 @@ impl Interpreter {
                 let mut callable = self.evaluate(call_expression)?;
                 match &mut callable {
                     Object::Callable(callable_object) => {
-                        if callable_object.parameters.len() != arguments.len() {
-                            // Check arity
-                            return Err(LoxError::RuntimeError(format!(
-                                "{} expects {} argument/s, found {}",
-                                &callable_object.name,
-                                callable_object.parameters.len(),
-                                arguments.len()
-                            )));
-                        }
-                        let mut arg_values = Vec::new();
-                        for arg_expr in arguments {
-                            let value = self.evaluate(arg_expr)?;
-                            arg_values.push(value);
-                        }
-                        let prev = self.current.clone();
-                        self.current = Rc::downgrade(&callable_object.environment);
-                        for (param, arg_value) in callable_object.parameters.iter().zip(arg_values)
-                        {
-                            self.update_or_add(param, arg_value);
-                        }
-                        let return_value: Result<Object, LoxError>;
-                        match self.handle_statement(&callable_object.function_block) {
-                            Ok(_) => return_value = Ok(Object::Nil),
-                            Err(err) => match err {
-                                LoxError::Return(value) => {
-                                    return_value = Ok(value);
-                                }
-                                _ => return Err(err),
-                            },
-                        }
-                        self.current = prev;
-                        return return_value;
+                        return self.call_with(callable_object, arguments);
                     }
                     Object::Class(lox_class) => {
                         let new_instance = create_instance(lox_class.clone());
@@ -389,42 +358,14 @@ impl Interpreter {
                                     .environment
                                     .update_or_add("this", Object::Instance(new_instance.clone()));
                                 {
-                                    // TODO: Clean me up, reuse Expression::Call code here. It does the same thing
-                                    if instance_init_callable.parameters.len() != arguments.len() {
-                                        // Check arity
-                                        return Err(LoxError::RuntimeError(format!(
-                                            "{} expects {} argument/s, found {}",
-                                            &instance_init_callable.name,
-                                            instance_init_callable.parameters.len(),
-                                            arguments.len()
-                                        )));
+                                    let init_result =
+                                        self.call_with(&instance_init_callable, arguments)?;
+                                    match init_result {
+                                        Object::Nil => {}
+                                        _ => {
+                                            assert!(false, "Cannot return from init")
+                                        }
                                     }
-                                    let mut arg_values = Vec::new();
-                                    for arg_expr in arguments {
-                                        let value = self.evaluate(arg_expr)?;
-                                        arg_values.push(value);
-                                    }
-                                    let prev = self.current.clone();
-                                    self.current =
-                                        Rc::downgrade(&instance_init_callable.environment);
-                                    for (param, arg_value) in
-                                        instance_init_callable.parameters.iter().zip(arg_values)
-                                    {
-                                        self.update_or_add(param, arg_value);
-                                    }
-                                    let _return_value: Result<Object, LoxError>; // TODO: init shouldn't have RV's handle error cases
-                                    match self
-                                        .handle_statement(&instance_init_callable.function_block)
-                                    {
-                                        Ok(_) => _return_value = Ok(Object::Nil),
-                                        Err(err) => match err {
-                                            LoxError::Return(value) => {
-                                                _return_value = Ok(value);
-                                            }
-                                            _ => return Err(err),
-                                        },
-                                    }
-                                    self.current = prev;
                                 }
                             }
                             None => {}
@@ -511,34 +452,43 @@ impl Interpreter {
             }
         }
     }
-    fn print_environment_node_helper(&self, node: Weak<RefCell<EnvironmentNode>>, indent: usize) {
-        for (name, object) in &node.upgrade().unwrap().borrow().environment.variables {
-            print!("{:<width$}", "", width = indent + 2);
-            println!("name: {} value={}", name, object);
-        }
-    }
 
-    fn print_environment_tree_helper(
+    fn call_with(
         &mut self,
-        node: Weak<RefCell<EnvironmentNode>>,
-        indent: usize,
-    ) {
-        print!("{:<width$}", "", width = indent);
-        println!("{{");
-        self.print_environment_node_helper(node.clone(), indent);
-        for child in &node.upgrade().unwrap().borrow().children {
-            self.print_environment_tree_helper(Rc::downgrade(&child), indent + 4);
+        callable: &CallableObject,
+        arguments: &Vec<Expression>,
+    ) -> Result<Object, LoxError> {
+        if callable.parameters.len() != arguments.len() {
+            // Check arity
+            return Err(LoxError::RuntimeError(format!(
+                "{} expects {} argument/s, found {}",
+                &callable.name,
+                callable.parameters.len(),
+                arguments.len()
+            )));
         }
-        print!("{:<width$}", "", width = indent);
-        println!("}}");
-    }
-    #[allow(dead_code)]
-    fn print_environment_tree(&mut self) {
-        self.print_environment_tree_helper(Rc::downgrade(&self.global_environment), 0);
-    }
-    #[allow(dead_code)]
-    fn print_current_environment_node(&mut self) {
-        self.print_environment_tree_helper(self.current.clone(), 0);
+        let mut arg_values = Vec::new();
+        for arg_expr in arguments {
+            let value = self.evaluate(arg_expr)?;
+            arg_values.push(value);
+        }
+        let prev = self.current.clone();
+        self.current = Rc::downgrade(&callable.environment);
+        for (param, arg_value) in callable.parameters.iter().zip(arg_values) {
+            self.update_or_add(param, arg_value);
+        }
+        let return_value: Result<Object, LoxError>;
+        match self.handle_statement(&callable.function_block) {
+            Ok(_) => return_value = Ok(Object::Nil),
+            Err(err) => match err {
+                LoxError::Return(value) => {
+                    return_value = Ok(value);
+                }
+                _ => return Err(err),
+            },
+        }
+        self.current = prev;
+        return return_value;
     }
 
     fn lookup_global(&self, name: &String) -> Option<Object> {
