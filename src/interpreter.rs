@@ -6,8 +6,8 @@ use crate::error::LoxError;
 use crate::parser::{
     BinaryOperator, Expression, LogicalOperator, Program, Statement, UnaryOperator,
 };
-use crate::resolver;
 use crate::resolver::DistanceTable;
+use crate::resolver::{self, Resolver};
 use crate::runtime::add_child;
 use crate::runtime::create_instance;
 use crate::runtime::is_true_value;
@@ -20,6 +20,7 @@ pub struct Interpreter {
     global_environment: Rc<RefCell<EnvironmentNode>>, // Root of our environment tree. Keeps all the other nodes alive
     current: Weak<RefCell<EnvironmentNode>>, // Points to the current environment based on what state the interpreter's is in
     local_variable_resolution_table: DistanceTable,
+    resolver: resolver::Resolver,
 }
 
 impl Interpreter {
@@ -30,11 +31,12 @@ impl Interpreter {
             global_environment,
             current: weak_ptr_to_global,
             local_variable_resolution_table: Vec::new(),
+            resolver: Resolver::new(),
         }
     }
 
     pub fn interpret(&mut self, program: Program) -> Result<(), LoxError> {
-        self.local_variable_resolution_table = resolver::resolve_variables(&program)?;
+        self.local_variable_resolution_table = self.resolver.resolve_variables(&program)?;
         let mut statements = program.statements;
         for statement in &mut statements {
             self.handle_statement(statement)?;
@@ -82,7 +84,13 @@ impl Interpreter {
                 }
             }
             Statement::FunctionDeclaration(name, parameters, body) => {
-                let callable = CallableObject::new(name, parameters, &body, &self.current.clone());
+                let callable = CallableObject::new(
+                    name,
+                    parameters,
+                    &body,
+                    &self.current.clone(),
+                    resolver::FunctionType::Function,
+                );
                 self.update_or_add(name, Object::Callable(callable));
             }
             Statement::Return(exp_opt) => {
@@ -102,8 +110,13 @@ impl Interpreter {
                 for stmt in _member_functions {
                     match stmt {
                         Statement::FunctionDeclaration(name, params, body) => {
-                            let callable =
-                                CallableObject::new(name, params, &body, &self.current.clone());
+                            let callable = CallableObject::new(
+                                name,
+                                params,
+                                &body,
+                                &self.current.clone(),
+                                resolver::FunctionType::Method,
+                            );
                             methods.insert(name.clone(), callable);
                         }
                         _ => {
@@ -344,9 +357,45 @@ impl Interpreter {
             Expression::Call(call_expression, arguments) => {
                 let mut callable = self.evaluate(call_expression)?;
                 match &mut callable {
-                    Object::Callable(callable_object) => {
-                        return self.call_with(callable_object, arguments);
-                    }
+                    Object::Callable(callable_object) => match callable_object.callable_type {
+                        resolver::FunctionType::Function => {
+                            self.call_with(callable_object, arguments)
+                        }
+                        resolver::FunctionType::Method => {
+                            let method_result = self.call_with(callable_object, arguments)?;
+                            if callable_object.name != "init" {
+                                return Ok(method_result);
+                            }
+                            if let Object::Nil = method_result {
+                                if let Some(object) = callable_object
+                                    .environment
+                                    .borrow()
+                                    .environment
+                                    .lookup("this")
+                                {
+                                    match object {
+                                        Object::Instance(lox_instance) => {
+                                            return Ok(Object::Instance(lox_instance.clone()));
+                                        }
+                                        _ => {
+                                            return Err(LoxError::InternalError(
+                                                "\"this\" bound to non-instance type".to_string(),
+                                            ));
+                                        }
+                                    }
+                                } else {
+                                    return Err(LoxError::InternalError(
+                                        "Could not find bound instance with \"this\"".to_string(),
+                                    ));
+                                }
+                            } else {
+                                return Err(LoxError::InternalError(
+                                    "Constructor returned value".to_string(),
+                                ));
+                            }
+                        }
+                        resolver::FunctionType::None => todo!(),
+                    },
                     Object::Class(lox_class) => {
                         let new_instance = create_instance(lox_class.clone());
                         match lox_class.methods.get("init") {

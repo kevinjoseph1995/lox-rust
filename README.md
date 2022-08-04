@@ -246,5 +246,19 @@ callback();
     var inst1 = Class();
     println inst1;
 }
+{
+    class Class{
+        fun init() {
+            return;
+        }
+    }
+    var instance1 = Class();    
+    
+    instance1.prop1 = 1;
+    var instance2 = instance1;    
+    instance2.prop2 = 2;
+
+    println instance2.init(); // Calling "init: explicitly returns a reference to the original instance
+}
 ///////////////////////////////////////////////////////////////
 ```

@@ -1,4 +1,7 @@
-use crate::parser::{LiteralType, Statement};
+use crate::{
+    parser::{LiteralType, Statement},
+    resolver,
+};
 use core::fmt::Debug;
 use std::{
     cell::RefCell,
@@ -49,6 +52,7 @@ pub struct CallableObject {
     pub parameters: Vec<String>,
     pub function_block: Box<Statement>,
     pub environment: Rc<RefCell<EnvironmentNode>>,
+    pub callable_type: resolver::FunctionType,
 }
 
 impl CallableObject {
@@ -57,6 +61,7 @@ impl CallableObject {
         parameters: &Vec<String>,
         function_block: &Statement,
         parent_environment: &Weak<RefCell<EnvironmentNode>>,
+        callable_type: resolver::FunctionType,
     ) -> Self {
         let mut env = EnvironmentNode::new();
         env.parent = Some(parent_environment.clone());
@@ -65,6 +70,7 @@ impl CallableObject {
             parameters: parameters.clone(),
             function_block: Box::new(function_block.clone()),
             environment: Rc::new(RefCell::new(env)),
+            callable_type,
         }
     }
 }
@@ -188,7 +194,7 @@ impl Environment {
         }
     }
 
-    pub fn lookup(&self, name: &String) -> Option<&Object> {
+    pub fn lookup(&self, name: &str) -> Option<&Object> {
         let lookup_result = self.variables.get(name);
         if let Some(value) = lookup_result {
             return Some(&value);

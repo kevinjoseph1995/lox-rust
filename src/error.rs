@@ -16,21 +16,21 @@ impl Display for LoxError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LoxError::IOError(err) => {
-                write!(f, "{}", err.to_string())
+                write!(f, "IOError {}", err.to_string())
             }
             LoxError::LexErr => {
                 write!(f, "Lexer Error")
             }
             LoxError::ParserError(err) => {
-                write!(f, "{}", err)
+                write!(f, "ParserError {}", err)
             }
             LoxError::RuntimeError(err) => {
-                write!(f, "{}", err)
+                write!(f, "RuntimeError {}", err)
             }
             LoxError::Return(value) => {
                 write!(f, "{}", value)
             }
-            LoxError::InternalError(err) => write!(f, "{}", err),
+            LoxError::InternalError(err) => write!(f, "InternalError {}", err),
         }
     }
 }
