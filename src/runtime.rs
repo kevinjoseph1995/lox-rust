@@ -51,7 +51,7 @@ pub struct CallableObject {
     pub name: String,
     pub parameters: Vec<String>,
     pub function_block: Box<Statement>,
-    pub environment: Rc<RefCell<EnvironmentNode>>,
+    pub environment_ptr: Rc<RefCell<EnvironmentNode>>,
     pub callable_type: resolver::FunctionType,
 }
 
@@ -60,16 +60,14 @@ impl CallableObject {
         name: &String,
         parameters: &Vec<String>,
         function_block: &Statement,
-        parent_environment: &Weak<RefCell<EnvironmentNode>>,
+        environment_ptr: Rc<RefCell<EnvironmentNode>>,
         callable_type: resolver::FunctionType,
     ) -> Self {
-        let mut env = EnvironmentNode::new();
-        env.parent = Some(parent_environment.clone());
         CallableObject {
             name: name.clone(),
             parameters: parameters.clone(),
             function_block: Box::new(function_block.clone()),
-            environment: Rc::new(RefCell::new(env)),
+            environment_ptr: environment_ptr,
             callable_type,
         }
     }
@@ -150,7 +148,6 @@ impl std::fmt::Display for Object {
             }
             Object::Callable(callable) => {
                 write!(f, "fn <{}>", &callable.name)
-                // TODO expand a little bit more
             }
             Object::Class(class_object) => {
                 write!(f, "class<{}>", (*class_object).name)

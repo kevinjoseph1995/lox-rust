@@ -131,16 +131,17 @@ impl Resolver {
                 self.current_class_type = ClassType::Class;
                 self.declare(name);
                 self.define(name);
+                self.scopes.push(HashMap::new());
                 for stmt in member_functions {
                     match stmt {
                         Statement::FunctionDeclaration(function_name, parameters, body) => {
                             let enclosing_function_type = self.current_function_type;
                             self.current_function_type = FunctionType::Method;
-                            self.scopes.push(HashMap::new());
-                            self.scopes
-                                .push(HashMap::from([(function_name.clone(), true)]));
+                            self.declare(function_name);
+                            self.define(function_name);
                             self.scopes
                                 .push(HashMap::from([("this".to_string(), true)]));
+                            self.scopes.push(HashMap::new());
                             for param in parameters {
                                 self.declare(param);
                                 self.define(param);

@@ -184,17 +184,17 @@ println "Chaining function calls";
 ///////////////////////////////////////////////////////////////
 println "Class support";
 {
-class Thing {
-fun getCallback() {
-  fun localFunction() {
-    println this;
-  }
+    class Thing {
+        fun getCallback() {
+        fun localFunction() {
+            println this;
+        }
 
-  return localFunction;
-}
-}
-var callback = Thing().getCallback();
-callback();
+        return localFunction;
+        }
+    }
+    var callback = Thing().getCallback();
+    callback();
 }
 
 {
@@ -260,5 +260,19 @@ callback();
 
     println instance2.init(); // Calling "init: explicitly returns a reference to the original instance
 }
+{
+    class Class {
+        fun fibonacci(n) {
+            if(n<=1)return n;
+            return this.fibonacci(n-1) + this.fibonacci(n-2);
+        }
+    }
+    for (var i = 0; i < 5; i = i + 1) {
+        print i;
+        print "'th fibonacci: ";
+        println Class().fibonacci(i);
+    }
+}
+
 ///////////////////////////////////////////////////////////////
 ```

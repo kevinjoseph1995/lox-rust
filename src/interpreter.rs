@@ -59,12 +59,12 @@ impl Interpreter {
             }
             Statement::Block(block_statements) => {
                 // Entered new scope
-                let prev = self.current.clone();
-                self.current = add_child(&mut self.current.upgrade().unwrap());
+                let parent = self.current.clone();
+                self.current = add_child(&mut parent.upgrade().unwrap());
                 for statement in block_statements {
                     self.handle_statement(statement)?;
                 }
-                self.current = prev;
+                self.current = parent;
             }
             Statement::If(condition, then_clause, else_clause) => {
                 let condition_value = self.evaluate(condition)?;
@@ -88,10 +88,10 @@ impl Interpreter {
                     name,
                     parameters,
                     &body,
-                    &self.current.clone(),
+                    self.current.upgrade().unwrap(),
                     resolver::FunctionType::Function,
                 );
-                self.update_or_add(name, Object::Callable(callable));
+                self.update_or_add(name, Object::Callable(callable.clone()));
             }
             Statement::Return(exp_opt) => {
                 if let Some(expression) = exp_opt {
@@ -106,6 +106,8 @@ impl Interpreter {
                 println!("{}", result)
             }
             Statement::ClassDeclaration(name, _member_functions) => {
+                let parent = self.current.clone();
+                self.current = add_child(&mut parent.upgrade().unwrap());
                 let mut methods: HashMap<String, CallableObject> = HashMap::new();
                 for stmt in _member_functions {
                     match stmt {
@@ -114,7 +116,7 @@ impl Interpreter {
                                 name,
                                 params,
                                 &body,
-                                &self.current.clone(),
+                                self.current.upgrade().unwrap(),
                                 resolver::FunctionType::Method,
                             );
                             methods.insert(name.clone(), callable);
@@ -130,6 +132,7 @@ impl Interpreter {
                     name: name.clone(),
                     methods,
                 };
+                self.current = parent;
                 self.update_or_add(name, Object::Class(Rc::new(class_object)));
             }
         }
@@ -368,7 +371,7 @@ impl Interpreter {
                             }
                             if let Object::Nil = method_result {
                                 if let Some(object) = callable_object
-                                    .environment
+                                    .environment_ptr
                                     .borrow()
                                     .environment
                                     .lookup("this")
@@ -394,15 +397,23 @@ impl Interpreter {
                                 ));
                             }
                         }
-                        resolver::FunctionType::None => todo!(),
+                        resolver::FunctionType::None => {
+                            return Err(LoxError::InternalError(
+                                "FunctionType::None called".to_string(),
+                            ))
+                        }
                     },
                     Object::Class(lox_class) => {
                         let new_instance = create_instance(lox_class.clone());
                         match lox_class.methods.get("init") {
                             Some(class_init_callable) => {
-                                let instance_init_callable = class_init_callable.clone();
+                                let mut instance_init_callable = class_init_callable.clone();
+                                instance_init_callable.environment_ptr =
+                                    add_child(&mut instance_init_callable.environment_ptr)
+                                        .upgrade()
+                                        .unwrap();
                                 instance_init_callable
-                                    .environment
+                                    .environment_ptr
                                     .borrow_mut()
                                     .environment
                                     .update_or_add("this", Object::Instance(new_instance.clone()));
@@ -412,7 +423,7 @@ impl Interpreter {
                                     match init_result {
                                         Object::Nil => {}
                                         _ => {
-                                            assert!(false, "Cannot return from init")
+                                            assert!(false, "Cannot return value from init")
                                         }
                                     }
                                 }
@@ -443,10 +454,16 @@ impl Interpreter {
                                 let function = class.as_ref().methods.get(property_name);
                                 match function {
                                     Some(class_callable_object) => {
-                                        let instance_callable_object =
+                                        let mut instance_callable_object =
                                             class_callable_object.clone();
+                                        instance_callable_object.environment_ptr = add_child(
+                                            &mut instance_callable_object.environment_ptr,
+                                        )
+                                        .upgrade()
+                                        .unwrap();
                                         instance_callable_object
-                                            .environment
+                                            .environment_ptr
+                                            .as_ref()
                                             .borrow_mut()
                                             .environment
                                             .update_or_add(
@@ -522,7 +539,7 @@ impl Interpreter {
             arg_values.push(value);
         }
         let prev = self.current.clone();
-        self.current = Rc::downgrade(&callable.environment);
+        self.current = add_child(&mut callable.environment_ptr.clone());
         for (param, arg_value) in callable.parameters.iter().zip(arg_values) {
             self.update_or_add(param, arg_value);
         }
@@ -644,7 +661,7 @@ impl Interpreter {
         return false;
     }
 
-    fn update_or_add(&mut self, name: &String, value: Object) {
+    fn update_or_add(&mut self, name: &str, value: Object) {
         self.current
             .upgrade()
             .unwrap()
