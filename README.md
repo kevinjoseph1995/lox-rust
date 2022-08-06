@@ -1,7 +1,15 @@
 # lox-rust
 
-WIP:
+An AST-walking interpreter of a lox-like language.
+The primary objective with this project was to work on something interesting as I learned rust. 
 
+Takeaways: 
+  - Pattern matching is incredibly useful.
+  - Fighting the borrow-checker is real.
+  
+Other notes:
+- No inheritance support.
+- No garbage collection.
 
 ```
 println "Scope and block statements";
